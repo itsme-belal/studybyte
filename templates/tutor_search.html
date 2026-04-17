@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="flex justify-between items-center mb-4">
+    <h2>Search Authorized Tutors</h2>
+</div>
+
+<div class="card mb-6 mb-4">
+    <form method="GET" action="{{ url_for('tutor_search') }}" class="flex gap-2 mb-4" id="tutorSearchForm">
+        <input type="text" name="q" value="{{ request.args.get('q', '') }}" class="form-control" placeholder="Search by name, skill, or department..." style="flex-grow: 1;">
+        <button type="submit" class="btn btn-primary">Search</button>
+    </form>
+    
+    <!-- Instant JS Filters -->
+    <div class="flex gap-4 items-center">
+        <strong class="text-sm">Instant Filters:</strong>
+        
+        <select id="sortRating" class="form-control" style="width: auto; padding: 0.3rem;" onchange="applyTutorFilters()">
+            <option value="">Sort by Rating</option>
+            <option value="high">Highest Rated First</option>
+            <option value="low">Lowest Rated First</option>
+        </select>
+        
+        <select id="filterSubject" class="form-control" style="width: auto; padding: 0.3rem;" onchange="applyTutorFilters()">
+            <option value="">All Departments/Subjects</option>
+            {% for t in tutors %}
+                {% if t.department %}
+                  <option value="{{ t.department }}">{{ t.department }}</option>
+                {% endif %}
+            {% endfor %}
+        </select>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="tutorsContainer">
+    {% for tutor in tutors %}
+    <div class="card flex flex-col p-4 rounded-xl shadow break-words bg-surface tutor-card" style="background:var(--bg-surface)" data-rating="{{ tutor.rating }}" data-dept="{{ tutor.department }}">
+        <div class="flex items-center gap-4 mb-4">
+             <div style="width: 60px; height: 60px; border-radius: 50%; background: var(--bg-surface-hover); overflow: hidden; flex-shrink: 0;">
+                 {% if tutor.profile_pic %}
+                    <img src="{{ tutor.profile_pic }}" style="width: 100%; height: 100%; object-fit: cover;">
+                 {% else %}
+                    <div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size: 10px; color: var(--text-muted);">No Pic</div>
+                 {% endif %}
+            </div>
+            <div>
+                <h3 class="text-teal font-bold leading-tight break-words"><a href="{{ url_for('view_profile', user_id=tutor.id) }}" style="text-decoration:none; color:inherit;">{{ tutor.name }}</a></h3>
+                <p class="text-xs text-muted break-words whitespace-normal">{{ tutor.department or 'General' }}</p>
+                <p class="text-warning text-xs font-bold mt-1">⭐ {{ '%0.1f'|format(tutor.rating) }} ({{ tutor.review_count }} Reviews)</p>
+            </div>
+        </div>
+        
+        <div class="flex-grow mt-2">
+            <p class="text-sm text-muted mb-4 leading-relaxed line-clamp-3 break-words whitespace-normal" style="display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">
+                {{ tutor.bio or 'This tutor has not provided a bio.' }}
+            </p>
+            <div class="flex gap-2 flex-wrap" style="flex-wrap: wrap;">
+                {% if tutor.skills %}
+                    {% for skill in tutor.skills.split(',')[:3] %}
+                        <span class="status status-pending" style="font-size: 0.75rem; border-width: 0; background-color: var(--bg-dark); padding: 0.25rem 0.5rem; border-radius: 0.5rem;">{{ skill.strip() }}</span>
+                    {% endfor %}
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="mt-4 pt-4" style="border-top:1px solid var(--border);">
+            <a href="{{ url_for('view_profile', user_id=tutor.id) }}" class="btn btn-primary w-full text-center text-sm" style="display:block;">View Full Profile</a>
+        </div>
+    </div>
+    {% else %}
+    <p class="text-muted col-span-3">No tutors match your criteria. Try adjusting the search.</p>
+    {% endfor %}
+</div>
+
+<script>
+// Filter for unique options in department select dynamically
+document.addEventListener("DOMContentLoaded", function() {
+    const select = document.getElementById("filterSubject");
+    const options = Array.from(select.options);
+    const seen = new Set();
+    const newChildren = [options[0]];
+    
+    for(let i = 1; i < options.length; i++) {
+        const val = options[i].value;
+        if(!seen.has(val) && val.trim() !== '') {
+            seen.add(val);
+            newChildren.push(options[i]);
+        }
+    }
+    select.innerHTML = '';
+    newChildren.forEach(opt => select.appendChild(opt));
+});
+
+function applyTutorFilters() {
+    const container = document.getElementById('tutorsContainer');
+    let cards = Array.from(container.getElementsByClassName('tutor-card'));
+    
+    const sortRating = document.getElementById('sortRating').value;
+    const filterSubject = document.getElementById('filterSubject').value;
+    
+    // Sort
+    if(sortRating) {
+        cards.sort((a, b) => {
+            const rA = parseFloat(a.dataset.rating) || 0;
+            const rB = parseFloat(b.dataset.rating) || 0;
+            return sortRating === 'high' ? rB - rA : rA - rB;
+        });
+    }
+
+    // Filter & Append back
+    cards.forEach(card => {
+        let show = true;
+        
+        if (filterSubject && card.dataset.dept !== filterSubject) {
+            show = false;
+        }
+        
+        card.style.display = show ? 'flex' : 'none';
+        container.appendChild(card); // append reorganizes list order
+    });
+}
+</script>
+{% endblock %}

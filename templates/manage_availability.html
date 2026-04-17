@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-4">
+    <h2 class="text-teal">Manage Availability Slots</h2>
+    <a href="{{ url_for('tutor_dashboard') }}" class="btn btn-outline">Back to Dashboard</a>
+</div>
+
+<div class="dashboard-grid">
+    <div class="card">
+        <h3 class="mb-4">Add New Slot</h3>
+        <form method="POST" action="{{ url_for('manage_availability') }}">
+            <div class="form-group mb-2">
+                <label class="form-label">Date</label>
+                <input type="date" name="date" id="datePicker" class="form-control" required>
+            </div>
+            <div class="form-group mb-2">
+                <label class="form-label">Start Time</label>
+                <input type="time" name="start_time" class="form-control" required>
+            </div>
+            <div class="form-group mb-4">
+                <label class="form-label">End Time</label>
+                <input type="time" name="end_time" class="form-control" required>
+            </div>
+            <button type="submit" class="btn btn-primary w-full">Add Slot</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h3 class="mb-4">Current Slots</h3>
+        <div style="max-height: 300px; overflow-y: auto;">
+            {% for s in slots %}
+            <div class="border-bottom flex justify-between items-center pb-2 mb-2 {% if s.is_frozen %}opacity-50{% endif %}" {% if s.is_frozen %}style="opacity: 0.5;"{% endif %}>
+                <div>
+                    <strong>{{ s.date }}</strong><br>
+                    <span class="text-xs text-muted">{{ s.start_time }} - {{ s.end_time }}</span>
+                </div>
+                <div>
+                    {% if s.is_booked %}
+                    <span class="status status-completed">Booked</span>
+                    {% elif s.is_frozen %}
+                    <span class="status status-cancelled">Expired/Frozen</span>
+                    {% else %}
+                    <form method="POST" action="{{ url_for('delete_availability', slot_id=s.id) }}">
+                        <button type="submit" class="btn btn-outline btn-sm" style="color: var(--danger); border-color: var(--danger); padding:0.2rem 0.5rem;" onclick="return confirm('Delete this slot?')">Delete</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <p class="text-muted">No availability slots set up.</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+    // Enforce no past dates in calendar
+    const datePicker = document.getElementById('datePicker');
+    const todayStr = new Date();
+    // Use local time instead of UTC to avoid off-by-one errors
+    const offset = todayStr.getTimezoneOffset() * 60000;
+    const localToday = new Date(todayStr.getTime() - offset).toISOString().split('T')[0];
+    datePicker.setAttribute('min', localToday);
+
+    // Enforce time bounds
+    document.querySelector('form').addEventListener('submit', function(e) {
+        const date = datePicker.value;
+        const start = document.querySelector('input[name="start_time"]').value;
+        const end = document.querySelector('input[name="end_time"]').value;
+
+        if (date && start && end) {
+            const startTimeStr = date + 'T' + start;
+            const endTimeStr = date + 'T' + end;
+            const dtStart = new Date(startTimeStr);
+            const dtEnd = new Date(endTimeStr);
+
+            if (dtStart < new Date()) {
+                e.preventDefault();
+                alert('Cannot set availability in the past.');
+                return;
+            }
+
+            const diffMins = (dtEnd - dtStart) / 60000;
+            if (diffMins < 5) {
+                e.preventDefault();
+                alert('Minimum duration is 5 minutes.');
+            } else if (diffMins > 300) {
+                e.preventDefault();
+                alert('Maximum duration is 5 hours.');
+            }
+        }
+    });
+</script>
+{% endblock %}

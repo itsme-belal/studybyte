@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}StudyByte - EWU Micro-Tutoring{% endblock %}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .block { display: block; }
+        .text-xs { font-size: 0.75rem; }
+        .text-3xl { font-size: 1.875rem; }
+        .font-bold { font-weight: bold; }
+        .w-full { width: 100%; }
+        .mb-2 { margin-bottom: 0.5rem; }
+        .mb-4 { margin-bottom: 1rem; }
+        .py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+    </style>
+    <script>
+        // Init theme early to prevent flash
+        const preferredTheme = "{{ current_user.theme_preference if current_user else 'system' }}";
+        let themeToApply = preferredTheme;
+        if (themeToApply === 'system') {
+            themeToApply = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-theme', themeToApply);
+    </script>
+</head>
+<body data-theme-pref="{{ current_user.theme_preference if current_user else 'system' }}">
+    <!-- 3D Interesting Background Video -->
+    <video autoplay loop muted playsinline id="bg-video" style="position: fixed; right: 0; bottom: 0; min-width: 100%; min-height: 100%; width: auto; height: auto; z-index: -1000; object-fit: cover; opacity: 0.15;">
+        <source src="{{ url_for('static', filename='video/bg.mp4') }}" type="video/mp4">
+    </video>
+    
+    <nav class="navbar">
+        <a href="{{ url_for('index') }}" class="nav-brand">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
+            Study<span>Byte</span>
+        </a>
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}" class="nav-item">Home</a>
+            <a href="{{ url_for('about') }}" class="nav-item">About</a>
+            <a href="{{ url_for('marketplace') }}" class="nav-item border-l pl-4 ms-2">Marketplace</a>
+            <a href="{{ url_for('tutor_search') }}" class="nav-item border-l pl-4 ms-2">Find Tutors</a>
+            {% if session.user_id %}
+                
+                {% if session.role in ['learner', 'tutor'] %}
+                <a href="{{ url_for('dashboard') }}" class="nav-item">Dashboard</a>
+                {% endif %}
+
+                {% if session.role == 'admin' %}
+                <a href="{{ url_for('admin_dashboard') }}" class="nav-item">Admin Panel</a>
+                {% endif %}
+                
+                {% if current_user.role != 'admin' %}
+                <a href="{{ url_for('wallet') }}" class="wallet-badge" title="1 Token = 0.50 BDT">
+                    🪙 {{ wallet.balance if wallet else 0 }} Tokens ({{ (wallet.balance * 0.50)|round(2) if wallet else 0 }} BDT)
+                </a>
+                
+                <form action="{{ url_for('switch_role', role='tutor' if session.role == 'learner' else 'learner') }}" class="inline" style="display:inline;">
+                    <button type="submit" class="btn btn-outline btn-sm" style="padding: 0.3rem 0.6rem;">Switch to {{ 'Tutor' if session.role == 'learner' else 'Learner' }}</button>
+                </form>
+                {% endif %}
+                
+                <select id="theme-selector" class="form-control" style="width:auto; padding: 0.2rem; font-size: 0.8rem; background: var(--bg-dark); color: var(--text-main);" onchange="updateTheme(this.value)">
+                    <option value="system" {% if current_user.theme_preference == 'system' %}selected{% endif %}>🖥️ System</option>
+                    <option value="light" {% if current_user.theme_preference == 'light' %}selected{% endif %}>☀️ Light</option>
+                    <option value="dark" {% if current_user.theme_preference == 'dark' %}selected{% endif %}>🌙 Dark</option>
+                </select>
+
+                <a href="{{ url_for('profile') }}" class="nav-item">Profile</a>
+                <a href="{{ url_for('logout') }}" class="btn btn-outline">Logout</a>
+            {% else %}
+                <a href="{{ url_for('login') }}" class="nav-item">Login</a>
+                <a href="{{ url_for('register') }}" class="btn btn-primary">Sign Up</a>
+            {% endif %}
+        </div>
+    </nav>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% if unread_notifications %}
+            <div id="notifications-box" class="card mb-4" style="background: rgba(13, 148, 136, 0.1); border-color: var(--accent-teal);">
+                <div class="flex justify-between items-center mb-2">
+                    <strong class="text-teal">🔔 You have {{ unread_notifications|length }} new notification(s)</strong>
+                    <button class="btn btn-sm btn-outline text-xs" onclick="dismissNotifications()">Dismiss All</button>
+                </div>
+                {% for n in unread_notifications %}
+                    <div class="text-sm border-bottom pb-1 mb-1">
+                        {{ n.message }}
+                        {% if n.action_url %}
+                            <a href="{{ n.action_url }}" class="text-warning ml-2 font-bold">Action Needed &rarr;</a>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+            <script>
+                function dismissNotifications() {
+                    fetch('{{ url_for("read_notifications") }}', {method: 'POST'})
+                    .then(() => document.getElementById('notifications-box').style.display = 'none');
+                }
+            </script>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- Theme Selection Handler -->
+    <script>
+        function updateTheme(theme) {
+            let apply = theme;
+            if (theme === 'system') {
+                apply = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            document.documentElement.setAttribute('data-theme', apply);
+            
+            // If logged in, save to backend
+            {% if session.user_id %}
+            fetch('{{ url_for("set_theme") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ theme: theme })
+            });
+            {% endif %}
+        }
+
+        // Listen for system preference changes if using 'system'
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+            const currentPref = document.body.getAttribute('data-theme-pref');
+            if (currentPref === 'system') {
+                document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+            }
+        });
+    </script>
+    
+    <!-- Footer -->
+    <footer style="text-align: center; padding: 1.5rem; margin-top: 3rem; border-top: 1px solid var(--border); background-color: var(--bg-surface);">
+        <p class="text-sm text-muted mb-1">&copy; {{ config.get('CURRENT_YEAR', '2026') }} StudyByte. All Rights Reserved.</p>
+        <p class="text-xs text-teal">Developed & Designed by <strong>Belal Hossain</strong></p>
+    </footer>
+</body>
+</html>

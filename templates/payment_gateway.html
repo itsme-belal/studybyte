@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card max-w-md mx-auto mt-10" style="text-align: center;">
+    {% if method == 'bKash' %}
+    <div style="background-color: #E2136E; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; display: inline-block;">
+        <h2 style="margin:0; font-weight: bold; letter-spacing: 1px;">bKash Gateway</h2>
+    </div>
+    {% elif method == 'Nagad' %}
+    <div style="background-color: #EC232B; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; display: inline-block;">
+         <h2 style="margin:0; font-weight: bold; letter-spacing: 1px;">Nagad Gateway</h2>
+    </div>
+    {% else %}
+    <h2 class="text-warning mb-4">{{ method }} Gateway</h2>
+    {% endif %}
+    
+    <p class="mb-2">Merchant: <strong>+8801618487558</strong></p>
+    <h3 class="text-2xl font-bold mb-4">{{ bdt_amount }} BDT</h3>
+    <p class="text-sm text-muted mb-4">You are purchasing {{ token_amount }} Tokens</p>
+
+    <form method="POST" action="{{ url_for('payment_callback') }}" id="paymentForm">
+        <input type="hidden" name="method" value="{{ method }}">
+        <input type="hidden" name="req_id" value="{{ req_id }}">
+        
+        <div class="form-group mb-4 text-left">
+            <label>Your {{ method }} Account Number</label>
+            <input type="text" name="account_no" class="form-control" placeholder="e.g 01XXXXXXXXX" pattern="(01)[3-9][0-9]{8}" title="Must be a valid 11-digit BD Phone Number" required>
+        </div>
+        
+        <div class="form-group mb-4 text-left">
+            <label>PIN Code</label>
+            <input type="password" name="pin" class="form-control" placeholder="****" required>
+        </div>
+        
+        <button type="submit" name="status" value="success" class="btn btn-primary w-full mb-2">Confirm Payment</button>
+        <button type="submit" name="status" value="failure" class="btn btn-outline w-full border border-danger text-danger">Cancel Payment</button>
+    </form>
+</div>
+{% endblock %}

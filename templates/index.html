@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div style="text-align: center; padding: 4rem 0;">
+    <h1 style="font-size: 3.5rem; margin-bottom: 1rem; color: var(--text-main);">
+        Master every topic with <span class="text-teal">StudyByte</span>
+    </h1>
+    <p style="font-size: 1.25rem; color: var(--text-muted); max-width: 600px; margin: 0 auto 2rem;">
+        The peer-to-peer micro-tutoring marketplace for university students. 
+        Learn exactly what you need, exactly when you need it.
+    </p>
+    <div style="display: flex; gap: 1rem; justify-content: center;">
+        <a href="{{ url_for('register') }}" class="btn btn-primary" style="font-size: 1.1rem; padding: 0.75rem 2rem;">Get Started</a>
+        <a href="{{ url_for('marketplace') }}" class="btn btn-outline" style="font-size: 1.1rem; padding: 0.75rem 2rem;">Browse Topics</a>
+    </div>
+
+    <div class="dashboard-grid" style="margin-top: 4rem; text-align: left;">
+        <div class="card">
+            <h3 class="text-teal mb-2">Micro-Topics</h3>
+            <p class="text-muted">Don't pay for a whole course. Get help on specific topics like "Python Loops" or "Integration by Parts".</p>
+        </div>
+        <div class="card">
+            <h3 class="text-teal mb-2">Secure Escrow</h3>
+            <p class="text-muted">Tokens are held securely until the session is verified with a unique meeting code.</p>
+        </div>
+        <div class="card">
+            <h3 class="text-teal mb-2">Peer-to-Peer</h3>
+            <p class="text-muted">Learn from top students in your university who have just aced the same classes.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

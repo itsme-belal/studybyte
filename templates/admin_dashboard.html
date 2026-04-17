@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-4">
+    <h2 class="text-teal">Admin Control Panel</h2>
+    <a href="{{ url_for('admin_sessions') }}" class="btn btn-primary" style="background-color: var(--danger);">🔴 Live Session Tracker</a>
+</div>
+
+<div class="dashboard-grid mb-4">
+    <div class="card p-4">
+        <h3 class="mb-2">Platform Overview</h3>
+        <ul style="list-style-type: none;" class="text-muted text-sm mt-3">
+            <li class="mb-2 border-bottom pb-2">Total Users: <strong class="text-main">{{ stats.total_users }}</strong> ({{ stats.students }} Stu / {{ stats.tutors }} Tut)</li>
+            <li class="mb-2 border-bottom pb-2">All Listings: <strong class="text-main">{{ stats.total_listings }}</strong> (<span class="text-success">{{ stats.active_courses }} Active</span> / <span class="text-warning">{{ stats.hidden_courses }} Hidden</span>)</li>
+            <li class="mb-2 border-bottom pb-2">Total Bookings: <strong class="text-main">{{ stats.total_bookings }}</strong></li>
+        </ul>
+    </div>
+    
+    <div class="card p-4">
+        <h3 class="mb-2">Revenue Tracking & Analytics</h3>
+        
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <div class="flex flex-col md:flex-row gap-4 mt-4 items-center">
+            <div class="flex-1 w-full">
+                <canvas id="financeChart" style="max-height: 250px;"></canvas>
+            </div>
+            <div class="flex-1 w-full">
+                <ul style="list-style-type: none;" class="text-muted text-sm mt-3" id="revenueList">
+                    <li class="mb-2 border-bottom pb-2">Tokens Circulating (Wallets): <strong class="text-warning">{{ stats.total_tokens }} 🪙</strong></li>
+                    <li class="mb-2 border-bottom pb-2">Loading analytics data...</li>
+                </ul>
+            </div>
+        </div>
+
+        <script>
+            fetch('/api/admin/analytics')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('revenueList').innerHTML = `
+                        <li class="mb-2 border-bottom pb-2">Tokens Circulating: <strong class="text-warning">{{ stats.total_tokens }} 🪙</strong></li>
+                        <li class="mb-2 border-bottom pb-2 text-success">Token Sales: <strong>${data.token_sell_bdt.toFixed(2)} BDT</strong></li>
+                        <li class="mb-2 border-bottom pb-2 text-success">Platform Fees: <strong>${data.platform_fee.toFixed(2)} BDT</strong></li>
+                        <li class="mb-2 border-bottom pb-2 text-success">Ad Revenue: <strong>${data.advertisement_bdt.toFixed(2)} BDT</strong></li>
+                        <li class="mb-2 pb-2 text-success"><strong>Gross Earning: ${data.total_revenue.toFixed(2)} BDT</strong></li>
+                        
+                        <li class="mb-2 border-bottom pb-2 mt-4 text-danger">Tutor Payouts: <strong>-${data.total_payout.toFixed(2)} BDT</strong></li>
+                        <li class="mb-2 border-bottom pb-2 text-danger">Promos/Bonus: <strong>-${data.bonus_bdt.toFixed(2)} BDT</strong></li>
+                        <li class="mb-2 pb-2 text-danger"><strong>Gross Expense: -${data.total_expense.toFixed(2)} BDT</strong></li>
+                        
+                        <li class="mb-2 mt-4 text-xl"><strong>System ${data.is_loss ? 'Loss' : 'Profit'}: <span class="${data.is_loss ? 'text-danger' : 'text-teal'}">${Math.abs(data.platform_profit).toFixed(2)} BDT</span></strong></li>
+                    `;
+                    
+                    const ctx = document.getElementById('financeChart').getContext('2d');
+                    new Chart(ctx, {
+                        type: 'pie',
+                        data: {
+                            labels: ['Token Sales', 'Fees Collected', 'Ad Revenue', 'Tutor Payouts', 'Promos/Bonus'],
+                            datasets: [{
+                                data: [data.token_sell_bdt, data.platform_fee, data.advertisement_bdt, data.total_payout, data.bonus_bdt],
+                                backgroundColor: [
+                                    'rgba(16, 185, 129, 0.7)',
+                                    'rgba(13, 148, 136, 0.7)',
+                                    'rgba(59, 130, 246, 0.7)',
+                                    'rgba(239, 68, 68, 0.7)',
+                                    'rgba(245, 158, 11, 0.7)'
+                                ],
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { position: 'bottom', labels: { color: '#94a3b8' } },
+                                title: { display: false }
+                            }
+                        }
+                    });
+                })
+                .catch(err => console.error(err));
+        </script>
+    </div>
+
+    <!-- Tutor Verification Queue -->
+    <div class="card p-4" style="grid-column: span 2;">
+        <h3 class="mb-4">Tutor Verification Queue</h3>
+        <div style="max-height: 250px; overflow-y: auto;">
+            <table style="width: 100%; border-collapse: collapse; text-align: left;" class="text-sm">
+                <tr class="border-bottom">
+                    <th class="pb-2">Name</th>
+                    <th class="pb-2">Student ID</th>
+                    <th class="pb-2">Report Link</th>
+                    <th class="pb-2">Action</th>
+                </tr>
+                {% for t in pending_tutors %}
+                <tr class="border-bottom">
+                    <td class="py-2">{{ t.name }}</td>
+                    <td class="py-2">{{ t.studentId }}</td>
+                    <td class="py-2"><a href="{{ url_for('uploaded_file', filename=t.grade_report) }}" target="_blank" class="text-teal">View PDF</a></td>
+                    <td class="py-2">
+                        <form method="POST" action="{{ url_for('verify_tutor', tutor_id=t.id) }}" class="flex gap-2">
+                            <button type="submit" name="action" value="approve" class="btn btn-sm btn-primary py-1 px-2">Approve</button>
+                            <input type="text" name="rejection_reason" placeholder="Reason (if reject)" class="form-control p-1" style="width: 120px; font-size: 0.75rem;">
+                            <button type="submit" name="action" value="reject" class="btn btn-sm btn-outline py-1 px-2" style="color:var(--danger); border-color:var(--danger);">Reject</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="py-4 text-muted text-center">No pending verifications.</td></tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="dashboard-grid mb-4">
+    <!-- Purchase Requests -->
+    <div class="card">
+        <h3>Token Purchase Requests</h3>
+        <div class="mt-4" style="max-height: 300px; overflow-y: auto;">
+            {% for p in purchases %}
+            <div class="border-bottom pb-2 mb-2 p-2" style="background-color: var(--bg-dark); border-radius: 0.3rem;">
+                <div class="flex justify-between items-center">
+                    <p class="text-sm font-bold">User #{{ p.user_id }} bought {{ p.token_amount }} 🪙</p>
+                    <span class="text-xs px-2 py-1 rounded {% if p.status == 'Approved' %}bg-teal-600{% elif p.status == 'Failed' %}bg-red-600{% else %}bg-gray-600{% endif %}">
+                        {{ p.status }}
+                    </span>
+                </div>
+                <p class="text-xs text-muted mt-1">TrxID: <strong class="text-teal">{{ p.transaction_id }}</strong> ({{ p.bdt_amount }} BDT via {{ p.method }} - {{ p.mobile_number }})</p>
+            </div>
+            {% else %}
+            <p class="text-muted text-sm">No recent purchases.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Withdrawal Requests -->
+    <div class="card">
+        <h3>Withdrawal Requests</h3>
+        <div class="mt-4" style="max-height: 300px; overflow-y: auto;">
+            {% for w in withdrawals %}
+            <div class="border-bottom pb-2 mb-2 p-2" style="background-color: var(--bg-dark); border-radius: 0.3rem;">
+                <p class="text-sm font-bold">User #{{ w.user_id }} requests {{ w.bdt_amount }} BDT</p>
+                <p class="text-xs text-muted mb-2">Send to: <strong class="text-warning">{{ w.mobile_number }}</strong> via {{ w.method }} (Cost: {{ w.token_amount }} 🪙)</p>
+                <form method="POST" class="flex gap-2">
+                    <button formaction="{{ url_for('admin_withdraw', w_id=w.id, action='approve') }}" class="btn btn-sm btn-primary">Mark Sent</button>
+                    <button formaction="{{ url_for('admin_withdraw', w_id=w.id, action='reject') }}" class="btn btn-sm btn-outline">Reject & Refund</button>
+                </form>
+            </div>
+            {% else %}
+            <p class="text-muted text-sm">No pending withdrawals.</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<div class="dashboard-grid mb-4">
+    <!-- Active Disputes -->
+    <div class="card">
+        <h3>Active Escrow Records (Disputes)</h3>
+        <div class="mt-4" style="max-height: 300px; overflow-y: auto;">
+            {% for tx in disputes %}
+            <div class="border-bottom pb-2 mb-2 flex justify-between items-center p-2">
+                <div>
+                    <span class="text-sm font-bold text-teal">{{ tx.amount }} 🪙 stuck</span>
+                    <p class="text-xs text-muted">Booking #{{ tx.booking_id }}</p>
+                </div>
+                <form method="POST" action="{{ url_for('resolve_dispute', tx_id=tx.id) }}" class="flex gap-2">
+                    <button type="submit" name="action" value="refund" class="btn btn-sm btn-outline" style="color:var(--danger); border-color:var(--danger);" onclick="return confirm('Refund to learner?')">Refund Learner</button>
+                    <button type="submit" name="action" value="pay_tutor" class="btn btn-sm btn-primary" onclick="return confirm('Pay Tutor directly?')">Force Pay Tutor</button>
+                </form>
+            </div>
+            {% else %}
+            <p class="text-muted text-sm">No active disputes.</p>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <!-- All Users -->
+    <div class="card">
+        <h3>User Management</h3>
+        <div class="mt-4" style="max-height: 300px; overflow-y: auto;">
+            <table style="width: 100%; border-collapse: collapse; text-align: left;" class="text-sm">
+                <tr class="border-bottom">
+                    <th class="pb-2">User</th>
+                    <th class="pb-2">Role/Status</th>
+                    <th class="pb-2">Action</th>
+                </tr>
+                {% for u in users %}
+                {% if u.role != 'admin' %}
+                <tr class="border-bottom">
+                    <td class="py-2"><strong>{{ u.name }}</strong><br><span class="text-xs text-muted">{{ u.email }}</span></td>
+                    <td class="py-2">
+                        <span class="status status-{{ 'completed' if u.status=='Active' else 'cancelled' }}">{{ u.status }}</span>
+                        {% if u.role == 'tutor' %}<br><span class="text-xs text-warning">{{ 'Verified' if u.is_verified else 'Unverified' }}</span>{% endif %}
+                    </td>
+                    <td class="py-2">
+                        <form method="POST" action="{{ url_for('toggle_suspend', u_id=u.id) }}">
+                            <button class="btn btn-sm btn-outline py-1 px-2" style="font-size: 0.70rem;">
+                                {{ 'Suspend' if u.status=='Active' else 'Unsuspend' }}
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endif %}
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

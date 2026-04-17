@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card mb-4" style="padding: 0; overflow: hidden; position: relative;">
+    <!-- Cover -->
+    <div style="height: 200px; background-color: var(--bg-surface-hover); width: 100%;">
+        {% if profile_user.cover_photo %}
+        <img src="{{ profile_user.cover_photo }}" class="w-full" style="height: 100%; object-fit: cover;">
+        {% endif %}
+    </div>
+    
+    <!-- Profile Info -->
+    <div style="padding: 2rem; display: flex; gap: 2rem; align-items: flex-end; margin-top: -60px;">
+        <div style="width: 120px; height: 120px; border-radius: 50%; border: 4px solid var(--bg-surface); background: var(--bg-dark); overflow: hidden; flex-shrink: 0;">
+             {% if profile_user.profile_pic %}
+                <img src="{{ profile_user.profile_pic }}" style="width: 100%; height: 100%; object-fit: cover;">
+             {% else %}
+                <div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; color: var(--text-muted);">No Pic</div>
+             {% endif %}
+        </div>
+        
+        <div style="flex-grow: 1; padding-bottom: 0.5rem; position: relative; z-index: 10;">
+            <h1 class="text-3xl font-bold">{{ profile_user.name }} <span class="status status-completed ml-2">{{ profile_user.role|capitalize }}</span></h1>
+            <p class="text-muted">{{ profile_user.department or 'Department not specified' }}</p>
+            {% if profile_user.role == 'tutor' %}
+            <p class="text-warning font-bold mt-1">⭐ {{ '%0.1f'|format(profile_user.rating) }} ({{ profile_user.review_count }} Reviews)</p>
+            {% endif %}
+        </div>
+        
+        <div style="padding-bottom: 0.5rem; z-index: 10;">
+           {% if profile_user.social_links %}
+           <a href="{{ profile_user.social_links }}" target="_blank" class="btn btn-outline" style="padding: 0.3rem 0.6rem;">🌐 Website / Social</a>
+           {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="dashboard-grid">
+    <div class="card">
+        <h3 class="mb-4">About Me</h3>
+        <p style="white-space: pre-wrap;" class="text-muted">{{ profile_user.bio or 'No bio provided.' }}</p>
+        
+        <h3 class="mt-4 mb-2">Education & Certifications</h3>
+        <p style="white-space: pre-wrap;" class="text-muted">{{ profile_user.education or 'None specified.' }}</p>
+        
+        <h3 class="mt-4 mb-2">Skills / Subjects</h3>
+        <div class="flex gap-2 mt-2" style="flex-wrap: wrap;">
+            {% if profile_user.skills %}
+                {% for skill in profile_user.skills.split(',') %}
+                    <span class="status status-pending" style="color:var(--text-main); border-color:var(--border); background:var(--bg-surface-hover);">{{ skill.strip() }}</span>
+                {% endfor %}
+            {% else %}
+                <p class="text-muted text-sm">No skills listed.</p>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- If Tutor, show active courses -->
+    {% if profile_user.role == 'tutor' %}
+    <div class="card">
+        <h3 class="mb-4">Active Courses</h3>
+        <div style="max-height: 400px; overflow-y:auto; padding-right:10px;">
+            {% for l in listings %}
+            <a href="{{ url_for('view_listing', listing_id=l.id) }}" style="text-decoration: none; color: inherit; display: block;" class="border-bottom pb-2 mb-4 hover:bg-[rgba(255,255,255,0.05)] transition-all">
+                <div class="flex justify-between items-center mb-1">
+                    <strong class="text-teal text-lg">{{ l.title }}</strong>
+                    <span class="status status-completed">{{ l.category }}</span>
+                </div>
+                <p class="text-sm text-muted mb-2 line-clamp-2" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">{{ l.description }}</p>
+                <strong class="text-warning">{{ l.price }} 🪙 / Session</strong>
+            </a>
+            {% else %}
+            <p class="text-muted">No active courses published.</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

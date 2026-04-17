@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-4">
+    <h2 class="text-teal">My Wallet</h2>
+    <span class="status status-completed" style="font-size: 1rem;">1 Token = 0.50 BDT</span>
+</div>
+
+<div class="dashboard-grid">
+    <div class="card">
+        <h3>Current Balance</h3>
+        <p class="text-3xl font-bold text-teal mt-2">{{ wallet.balance }} 🪙</p>
+        <p class="text-muted mb-4">(Equivalent to {{ wallet.balance * 0.50 }} BDT)</p>
+        
+        <!-- Purchase Form -->
+        <div class="mt-4 pt-4" style="border-top: 1px solid var(--border);">
+            <h4 class="mb-2 text-warning">Purchase Tokens</h4>
+            <form method="POST" action="{{ url_for('purchase_tokens') }}">
+                <div class="form-group">
+                    <select name="method" class="form-control mb-2" required>
+                        <option value="">Select Gateway</option>
+                        <option value="bKash">bKash</option>
+                        <option value="Nagad">Nagad</option>
+                    </select>
+                </div>
+                <div class="form-group mb-2">
+                    <input type="number" name="bdt_amount" id="bdt_purchase" class="form-control" placeholder="Amount to Pay (BDT)" min="10" required oninput="calcTokens()">
+                </div>
+                <p class="text-xs text-muted mb-2">You will receive: <strong class="text-teal" id="token_preview">0</strong> Tokens</p>
+                <button type="submit" class="btn btn-primary w-full">Proceed to Payment Gateway</button>
+            </form>
+        </div>
+        
+        <!-- Withdraw Form (Tutors) -->
+        {% if session.role == 'tutor' %}
+        <div class="mt-4 pt-4" style="border-top: 1px solid var(--border);">
+            <h4 class="mb-2 text-warning">Cash Out (Withdraw)</h4>
+            <form method="POST" action="{{ url_for('withdraw_funds') }}">
+                <div class="form-group">
+                    <select name="method" class="form-control mb-2" required>
+                        <option value="">Select Mobile Banking</option>
+                        <option value="bKash">bKash</option>
+                        <option value="Nagad">Nagad</option>
+                    </select>
+                </div>
+                <div class="form-group mb-2">
+                    <input type="text" name="mobile_number" class="form-control" placeholder="e.g. 01XXXXXXXXX" pattern="(01)[3-9][0-9]{8}" title="Must be a valid 11-digit BD Phone Number" required>
+                </div>
+                <div class="form-group mb-2">
+                    <input type="number" name="token_amount" id="token_withdraw" class="form-control" placeholder="Tokens to withdraw" max="{{ wallet.balance }}" min="10" required oninput="calcBdt()">
+                </div>
+                <p class="text-xs text-muted mb-2">You will receive: <strong class="text-success" id="bdt_preview">0</strong> BDT</p>
+                <button type="submit" class="btn btn-outline w-full">Submit Cash Out Request</button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+
+    <div>
+        <div class="card mb-4">
+            <h3>Pending Requests</h3>
+            <div class="mt-4" style="max-height: 200px; overflow-y: auto;">
+                {% for p in purchases %}
+                <div class="border-bottom pb-2 mb-2">
+                    <p class="text-sm font-bold">Purchase: {{ p.token_amount }} 🪙 ({{ p.bdt_amount }} BDT)</p>
+                    <p class="text-xs text-muted">TrxID: {{ p.transaction_id }} via {{ p.method }}</p>
+                    <span class="status status-{{ p.status|lower }}">{{ p.status }}</span>
+                </div>
+                {% endfor %}
+                {% for w in withdrawals %}
+                <div class="border-bottom pb-2 mb-2">
+                    <p class="text-sm font-bold">Withdrawal: {{ w.token_amount }} 🪙 ({{ w.bdt_amount }} BDT)</p>
+                    <p class="text-xs text-muted">To: {{ w.mobile_number }} via {{ w.method }}</p>
+                    <span class="status status-{{ w.status|lower }}">{{ w.status }}</span>
+                </div>
+                {% endfor %}
+                {% if not purchases and not withdrawals %}
+                <p class="text-muted text-sm">No pending requests.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Transaction History</h3>
+            <div class="mt-4" style="max-height: 400px; overflow-y: auto;">
+                {% for tx in transactions %}
+                <div class="border-bottom pb-2 mb-2">
+                    <div class="flex justify-between">
+                        <span class="text-sm font-bold {% if tx.amount > 0 %}text-success{% else %}text-danger{% endif %}">
+                            {% if tx.amount > 0 %}+{% endif %}{{ tx.amount }} 🪙
+                        </span>
+                        <span class="text-xs text-muted">{{ tx.timestamp.strftime('%d %b %Y, %H:%M') }}</span>
+                    </div>
+                    <p class="text-xs text-muted">{{ tx.type }}: {{ tx.description }}</p>
+                </div>
+                {% else %}
+                <p class="text-muted text-sm">No recorded transactions.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function calcTokens() {
+        const bdt = document.getElementById('bdt_purchase').value;
+        const result = document.getElementById('token_preview');
+        result.innerText = (bdt / 0.50) || 0;
+    }
+    function calcBdt() {
+        const tokens = document.getElementById('token_withdraw').value;
+        const result = document.getElementById('bdt_preview');
+        result.innerText = (tokens * 0.50) || 0;
+    }
+</script>
+{% endblock %}

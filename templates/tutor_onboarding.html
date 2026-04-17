@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div style="max-width: 600px; margin: 2rem auto;">
+    <div class="card">
+        <h2 class="mb-2 text-center text-teal">Become a Tutor</h2>
+        <p class="text-center text-muted mb-4">You're one step away from sharing your knowledge!</p>
+        
+        <div class="alert alert-warning mb-4" style="background-color: rgba(245, 158, 11, 0.1); border: 1px solid var(--warning); color: var(--text-main);">
+            <strong>One-Time Verification Required</strong>
+            <p class="text-sm mt-2">To maintain the highest quality of learning on StudyByte, all new tutors must submit their latest EWU Academic Grade Report. Once an Admin verifies your report, you'll gain permanent access to Tutor features like managing availability and creating topics.</p>
+        </div>
+
+        <form method="POST" action="{{ url_for('tutor_apply') }}" enctype="multipart/form-data">
+            <div class="form-group mb-4">
+                <label class="form-label" style="font-weight: 600;">Upload Grade Report (PDF Only)</label>
+                <div class="mt-2" style="background-color: var(--bg-dark); padding: 1.5rem; border-radius: 0.5rem; border: 1px dashed var(--border); text-align: center;">
+                    <input type="file" name="grade_report" accept="application/pdf" class="form-control" style="background: transparent; border: none;" required>
+                </div>
+            </div>
+            
+            <button type="submit" class="btn btn-primary w-full py-2" style="font-size: 1.1rem;">Submit Application</button>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-outline w-full py-2 mt-2" style="text-align: center; display: block;">Cancel & Return to Learner Dashboard</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

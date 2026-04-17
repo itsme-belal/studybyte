@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 class="text-teal mb-4">Learner Dashboard</h2>
+
+{% if suggested_listings %}
+<div class="mb-8">
+    <h3 class="mb-4 text-warning">⭐ Suggested For You</h3>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for listing in suggested_listings %}
+        <div class="card flex flex-col p-4 rounded-xl shadow break-words bg-surface" style="border-color: var(--warning);">
+            <div class="flex justify-between items-center mb-2">
+                <span class="text-muted text-sm">{{ listing.category }}</span>
+                <span class="text-teal font-bold">{{ listing.price }} 🪙</span>
+            </div>
+            <h4 class="mb-2 text-lg font-bold leading-tight break-words">
+                <a href="{{ url_for('view_listing', listing_id=listing.id) }}" style="text-decoration: none; color: inherit;">{{ listing.title }}</a>
+            </h4>
+            <div class="text-sm border-top pt-2 mt-auto" style="border-top:1px solid var(--border);">
+                <span class="text-warning">⭐ {{ "%.1f"|format(listing.tutor.rating) }}</span> by {{ listing.tutor.name }}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<div class="dashboard-grid">
+    <div class="card">
+        <h3>My Upcoming Sessions</h3>
+        <div class="mt-4" style="max-height: 400px; overflow-y: auto;">
+            {% for b in upcoming_bookings %}
+            <div class="border-bottom pb-2 mb-4">
+                <div class="flex justify-between items-center mb-1">
+                    <strong>{{ b.listing.title }}</strong>
+                    <span class="status status-{{ b.status|lower }}">{{ b.status }}</span>
+                </div>
+                
+                <p class="text-sm font-bold text-teal">{{ b.slot.date }} @ {{ b.slot.start_time }}-{{ b.slot.end_time }}</p>
+                <p class="text-muted text-sm mb-2">Tutor: {{ b.listing.tutor.name }}</p>
+                
+                <p class="text-muted text-sm mb-2">Tutor: {{ b.listing.tutor.name }}</p>
+                
+                <div class="flex space-x-2 mt-2 mb-2">
+                    {% if b.status == 'Confirmed' %}
+                    <a href="{{ url_for('chat_room', booking_id=b.id) }}" class="btn btn-secondary w-full text-center" style="padding: 5px;">💬 Chat / Meet</a>
+                    {% endif %}
+                    
+                    <form method="POST" action="{{ url_for('cancel_booking', booking_id=b.id) }}" class="w-full" onsubmit="return confirm('Cancel this booking? {% if b.status == 'Confirmed' %}A 20% penalty will apply.{% endif %}');">
+                        <button type="submit" class="btn btn-outline border-danger text-danger w-full" style="padding: 5px;">❌ Cancel</button>
+                    </form>
+                </div>
+                
+                {% if b.status == 'Confirmed' %}
+                <div class="p-3" style="background-color: var(--bg-dark); border-radius: 0.3rem;">
+                    {% if b.learner_checked_in %}
+                    <p class="text-success text-sm font-bold">✅ You checked in. Waiting for Tutor...</p>
+                    {% else %}
+                    <form method="POST" action="{{ url_for('check_in_session', booking_id=b.id) }}">
+                        <button type="submit" class="btn btn-primary w-full py-2">✅ Check-In to Session</button>
+                    </form>
+                    <p class="text-xs text-muted mt-2">Check-in releases the escrow payment to the tutor.</p>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+            {% else %}
+            <p class="text-muted">No upcoming scheduled sessions.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>History & Reviews</h3>
+        <div class="mt-4">
+            {% for b in past_bookings %}
+            <div class="border-bottom pb-2 mb-2 flex justify-between items-center">
+                <div>
+                    <strong>{{ b.listing.title }}</strong>
+                    <p class="text-muted text-sm">{{ b.slot.date }} - {{ b.status }}</p>
+                </div>
+                {% if b.status == 'Completed' and not b.has_review %}
+                <a href="{{ url_for('review', booking_id=b.id) }}" class="btn btn-outline btn-sm px-2">Leave Review</a>
+                {% endif %}
+            </div>
+            {% else %}
+            <p class="text-muted">No past sessions.</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

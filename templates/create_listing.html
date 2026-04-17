@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div style="max-width: 600px; margin: 0 auto;">
+    <div class="card">
+        <h2 class="mb-4 text-teal">Create Topic Listing</h2>
+        
+        <div class="alert alert-success mb-4" style="background-color: rgba(16, 185, 129, 0.1); border: 1px solid var(--success); color: var(--text-main);">
+            <strong>Requirement:</strong> You must have unbooked availability slots in your schedule for this listing to be bookable by learners.
+            <div class="mt-2"><a href="{{ url_for('manage_availability') }}" class="btn btn-outline btn-sm">Manage Availability Slots</a></div>
+        </div>
+        
+        <form method="POST" action="{{ url_for('create_listing') }}">
+            <div class="form-group mb-4">
+                <label class="form-label">Topic Title</label>
+                <input type="text" name="title" class="form-control" required placeholder="e.g. Python Loops, SQL Joins">
+            </div>
+            <div class="form-group mb-4">
+                <label class="form-label">Category / Department</label>
+                <select name="category" class="form-control" required>
+                    <option value="Computer Science">Computer Science</option>
+                    <option value="Mathematics">Mathematics</option>
+                    <option value="Physics">Physics</option>
+                    <option value="Business">Business</option>
+                    <option value="Engineering">Engineering</option>
+                    <option value="Liberal Arts">Liberal Arts</option>
+                </select>
+            </div>
+            <div class="form-group mb-4">
+                <label class="form-label">Description & What we'll cover</label>
+                <textarea name="description" class="form-control" rows="4" required></textarea>
+            </div>
+            <div class="form-group mb-4">
+                <label class="form-label">Price per Session (Tokens)</label>
+                <input type="number" name="price" class="form-control" min="1" required value="10">
+                <p class="text-xs text-muted mt-1">Learners will pay this amount from their wallet.</p>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%;">Publish Listing</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

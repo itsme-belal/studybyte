@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card" style="max-width: 800px; margin: 0 auto;">
+    <div class="flex justify-between items-center mb-4">
+        <span class="status status-completed">{{ listing.category }}</span>
+        <h2 class="text-teal font-bold">{{ listing.price }} 🪙 / session</h2>
+    </div>
+    
+    <h1 class="mb-4">{{ listing.title }}</h1>
+    
+    <div class="flex items-center gap-4 mb-6 pb-6" style="border-bottom: 1px solid var(--border);">
+        <div class="text-muted">
+            Offered by: <strong class="text-main">{{ listing.tutor.name }}</strong>
+        </div>
+        <div class="text-warning">
+            ⭐ {{ "%.1f"|format(listing.tutor.rating) }}
+        </div>
+        <div class="text-muted">
+            Dep: {{ listing.tutor.department }}
+        </div>
+    </div>
+
+    <div class="mb-6">
+        <h3 class="mb-2">Description / What we'll cover</h3>
+        <p style="white-space: pre-wrap; color: var(--text-muted);">{{ listing.description }}</p>
+    </div>
+
+    {% if session.role == 'learner' %}
+    <div class="p-4" style="background-color: var(--bg-dark); border-radius: 0.5rem; border: 1px solid var(--border); padding: 1.5rem;">
+        <h3 class="mb-4">Book this Topic</h3>
+        <form method="POST" action="{{ url_for('book_session', listing_id=listing.id) }}">
+            
+            <div class="form-group mb-4">
+                <label class="form-label" style="font-weight: 600;">Select an Available Time Slot:</label>
+                <div class="flex flex-col gap-2 mt-2">
+                    {% for slot in slots %}
+                    <label class="flex items-center gap-2 p-3 border rounded" style="background-color: var(--bg-surface); border-radius: 0.5rem; cursor: pointer; border: 1px solid var(--border);">
+                        <input type="radio" name="slot_id" value="{{ slot.id }}" required style="accent-color: var(--accent-teal);">
+                        <span class="font-bold">{{ slot.date }}</span>
+                        <span class="text-muted text-sm ml-auto">{{ slot.start_time }} to {{ slot.end_time }}</span>
+                    </label>
+                    {% else %}
+                    <div class="alert alert-warning text-sm">
+                        This tutor currently has no available time slots.
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="form-group mb-4">
+                <label class="form-label">Urgency Statement / Note to Tutor (Optional)</label>
+                <textarea name="note" class="form-control" rows="2" placeholder="I have a midterm tomorrow..."></textarea>
+            </div>
+            
+            <button type="submit" class="btn btn-primary w-full py-2" {% if not slots %}disabled{% endif %} style="font-size: 1.1rem;">
+                Confirm Booking (Hides {{ listing.price }} 🪙 in Escrow)
+            </button>
+        </form>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

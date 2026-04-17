@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-4">
+    <h2 class="text-teal">Marketplace</h2>
+    <form method="GET" action="{{ url_for('marketplace') }}" class="flex gap-2">
+        <input type="text" name="q" class="form-control" placeholder="Search topics..." value="{{ request.args.get('q', '') }}">
+        <select name="category" class="form-control">
+            <option value="">All Categories</option>
+            <option value="Computer Science" {% if request.args.get('category') == 'Computer Science' %}selected{% endif %}>Computer Science</option>
+            <option value="Mathematics" {% if request.args.get('category') == 'Mathematics' %}selected{% endif %}>Mathematics</option>
+            <option value="Physics" {% if request.args.get('category') == 'Physics' %}selected{% endif %}>Physics</option>
+            <option value="Business" {% if request.args.get('category') == 'Business' %}selected{% endif %}>Business</option>
+        </select>
+        <button type="submit" class="btn btn-primary">Search</button>
+    </form>
+</div>
+
+<div class="flex gap-2 items-center mb-4 text-sm bg-surface p-2 rounded" style="background:var(--bg-surface); padding: 0.5rem; border-radius: 4px;">
+    <strong>Sort By:</strong>
+    <select id="courseSort" class="form-control" style="width: auto; padding: 0.2rem;" onchange="sortCourses()">
+        <option value="newest">Newest First</option>
+        <option value="price_low">Price: Low to High</option>
+        <option value="price_high">Price: High to Low</option>
+        <option value="rating">Rating: Highest First</option>
+    </select>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="courseContainer">
+    {% for listing in listings %}
+    <div class="card course-card flex flex-col p-4 rounded-xl shadow break-words bg-surface" style="background:var(--bg-surface)" data-price="{{ listing.price }}" data-rating="{{ listing.tutor.rating }}" data-id="{{ listing.id }}" data-advertised="{{ '1' if listing.is_advertised else '0' }}">
+        <div class="flex justify-between items-center mb-2">
+            <span class="text-muted text-sm">{{ listing.category }}</span>
+            <span class="text-teal font-bold">{{ listing.price }} 🪙</span>
+        </div>
+        <h3 class="mb-3 text-lg font-bold leading-tight break-words">
+            <a href="{{ url_for('view_listing', listing_id=listing.id) }}" style="text-decoration: none; color: inherit;">
+                {% if listing.is_advertised %}<span class="text-xs text-warning border border-warning px-1 rounded mr-1" style="vertical-align: middle;">⭐ Suggested</span>{% endif %}
+                {{ listing.title }}
+            </a>
+        </h3>
+        <p class="text-muted mb-4 flex-grow leading-relaxed break-words whitespace-normal">{{ listing.description[:100] }}...</p>
+        
+        <div class="flex border-top pt-4 mt-auto justify-between items-center" style="border-top:1px solid var(--border);">
+            <div class="text-sm">
+                <a href="{{ url_for('view_profile', user_id=listing.tutor.id) }}" style="text-decoration:none; color:inherit;" class="hover:text-teal font-bold">
+                    {{ listing.tutor.name }}
+                </a><br>
+                <span class="text-warning">⭐ {{ "%.1f"|format(listing.tutor.rating) }}</span>
+            </div>
+            <a href="{{ url_for('view_listing', listing_id=listing.id) }}" class="btn btn-primary text-sm px-3 py-1">View</a>
+        </div>
+    </div>
+    {% else %}
+    <p class="text-muted">No active listings found. Try adjusting your search.</p>
+    {% endfor %}
+</div>
+
+<script>
+function sortCourses() {
+    const container = document.getElementById('courseContainer');
+    const sortVal = document.getElementById('courseSort').value;
+    let cards = Array.from(container.getElementsByClassName('course-card'));
+    
+    if (cards.length === 0) return;
+    
+    cards.sort((a, b) => {
+        const adA = parseInt(a.dataset.advertised);
+        const adB = parseInt(b.dataset.advertised);
+        
+        if (adA !== adB) {
+            return adB - adA; // Advertised always on top
+        }
+
+        const idA = parseInt(a.dataset.id);
+        const idB = parseInt(b.dataset.id);
+        const priceA = parseFloat(a.dataset.price);
+        const priceB = parseFloat(b.dataset.price);
+        const rateA = parseFloat(a.dataset.rating);
+        const rateB = parseFloat(b.dataset.rating);
+        
+        switch (sortVal) {
+            case 'price_low': return priceA - priceB;
+            case 'price_high': return priceB - priceA;
+            case 'rating': return rateB - rateA;
+            case 'newest': default: return idB - idA;
+        }
+    });
+    
+    // reattach
+    cards.forEach(card => container.appendChild(card));
+}
+// trigger on load
+sortCourses();
+</script>
+{% endblock %}

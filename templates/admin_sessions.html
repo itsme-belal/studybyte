@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-4">
+    <h2 class="text-teal">📡 Live Session Tracker</h2>
+    <div class="text-sm text-muted">
+        Auto-refreshes every 15 seconds <span class="status status-pending ml-2" id="sync-indicator">Syncing...</span>
+    </div>
+</div>
+
+<div class="dashboard-grid" style="grid-template-columns: 1fr;">
+    
+    <!-- Currently Running / Confirmed -->
+    <div class="card p-4" style="border-left: 4px solid var(--success);">
+        <h3 class="mb-4">🟢 Running & Upcoming Confirmed Sessions</h3>
+        <table style="width: 100%; border-collapse: collapse; text-align: left;" class="text-sm">
+            <tr class="border-bottom text-muted">
+                <th class="pb-2">Booking ID</th>
+                <th class="pb-2">Course</th>
+                <th class="pb-2">Tutor</th>
+                <th class="pb-2">Student</th>
+                <th class="pb-2">Status & Escrow</th>
+                <th class="pb-2">Time Slot</th>
+            </tr>
+            {% for r in running %}
+            <tr class="border-bottom hover:bg-[rgba(255,255,255,0.02)]">
+                <td class="py-3 font-bold">#{{ r.id }}</td>
+                <td class="py-3">{{ r.listing.title }}</td>
+                <td class="py-3 text-teal">{{ r.listing.tutor.name }}</td>
+                <td class="py-3 text-warning">{{ r.learner.name }}</td>
+                <td class="py-3">
+                    <span class="status status-confirmed">Confirmed</span>
+                    <span class="text-xs ml-1">{{ r.listing.price }} Hold</span>
+                </td>
+                <td class="py-3">{{ r.slot.date }} ({{ r.slot.start_time }}-{{ r.slot.end_time }})</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="py-4 text-center text-muted">No confirmed running sessions at this time.</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+
+    <!-- Scheduled / Waiting -->
+    <div class="card p-4" style="border-left: 4px solid var(--warning);">
+        <h3 class="mb-4">🟡 Pending Booking Requests</h3>
+        <table style="width: 100%; border-collapse: collapse; text-align: left;" class="text-sm">
+            <tr class="border-bottom text-muted">
+                <th class="pb-2">Booking ID</th>
+                <th class="pb-2">Course</th>
+                <th class="pb-2">Tutor</th>
+                <th class="pb-2">Student</th>
+                <th class="pb-2">Status</th>
+                <th class="pb-2">Date/Time</th>
+            </tr>
+            {% for s in scheduled %}
+            <tr class="border-bottom transition-all">
+                <td class="py-3 font-bold">#{{ s.id }}</td>
+                <td class="py-3">{{ s.listing.title }}</td>
+                <td class="py-3">{{ s.listing.tutor.name }}</td>
+                <td class="py-3">{{ s.learner.name }}</td>
+                <td class="py-3"><span class="status status-pending">Waiting For Tutor</span></td>
+                <td class="py-3">{{ s.slot.date }} @ {{ s.slot.start_time }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="py-4 text-center text-muted">No pending queues.</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+
+    <!-- Cancelled / Expired / Completed Logs -->
+    <div class="card p-4" style="border-left: 4px solid var(--danger);">
+        <div class="flex justify-between items-center mb-4">
+            <h3>🔴 Past Session Logs</h3>
+            <button class="btn btn-sm btn-outline text-xs" onclick="window.print()">Export Logs to PDF</button>
+        </div>
+        <div style="max-height: 300px; overflow-y: auto;">
+            <table style="width: 100%; border-collapse: collapse; text-align: left;" class="text-sm">
+                <tr class="border-bottom text-muted">
+                    <th class="pb-2">Booking ID</th>
+                    <th class="pb-2">Course</th>
+                    <th class="pb-2">Tutor / Student</th>
+                    <th class="pb-2">Resolution</th>
+                    <th class="pb-2">Created</th>
+                </tr>
+                {% for p in past %}
+                <tr class="border-bottom">
+                    <td class="py-2">#{{ p.id }}</td>
+                    <td class="py-2">{{ p.listing.title }}</td>
+                    <td class="py-2">{{ p.listing.tutor.name }} / {{ p.learner.name }}</td>
+                    <td class="py-2">
+                        <span class="status status-{{ 'completed' if p.status == 'Completed' else 'cancelled' }}">{{ p.status }}</span>
+                    </td>
+                    <td class="py-2">{{ p.timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="py-4 text-center text-muted">No historical logs.</td></tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Simple polling mechanism to refresh the page strictly for admin active sessions UI
+    setInterval(() => {
+        const ind = document.getElementById('sync-indicator');
+        ind.style.backgroundColor = 'var(--success)';
+        ind.innerText = 'Refreshed';
+        window.location.reload();
+    }, 15000); // 15s interval sync
+</script>
+{% endblock %}
