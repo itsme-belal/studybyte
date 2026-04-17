@@ -8,8 +8,13 @@ import os, random, string, re, uuid
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'studybyte-super-secret-ewu'
-database_url = os.environ.get('DATABASE_URL', 'sqlite:///studybyte_v5.db')
-if database_url.startswith("postgres://"):
+database_url = os.environ.get('DATABASE_URL')
+if not database_url:
+    if os.environ.get('VERCEL'):
+        database_url = 'sqlite:////tmp/studybyte_v5.db' # Vercel-safe fallback
+    else:
+        database_url = 'sqlite:///studybyte_v5.db' # Local Windows fallback
+elif database_url.startswith("postgres://"):
     database_url = database_url.replace("postgres://", "postgresql://", 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
