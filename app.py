@@ -179,12 +179,22 @@ class Notification(db.Model):
     is_read = db.Column(db.Boolean, default=False)
     action_url = db.Column(db.String(255), nullable=True)
 
-with app.app_context():
-    db.create_all()
-    if not User.query.filter_by(role='admin').first():
-        admin = User(name='Platform Admin', email='admin@studybyte.edu', password_hash=generate_password_hash('admin123'), role='admin')
-        db.session.add(admin)
-        db.session.commit()
+_db_initialized = False
+
+@app.before_request
+def initialize_database():
+    global _db_initialized
+    if not _db_initialized:
+        try:
+            db.create_all()
+            if not User.query.filter_by(role='admin').first():
+                admin = User(name='Platform Admin', email='admin@studybyte.edu', password_hash=generate_password_hash('admin123'), role='admin')
+                db.session.add(admin)
+                db.session.commit()
+            _db_initialized = True
+        except Exception as e:
+            print(f"CRITICAL DATABASE ERROR: {e}")
+            _db_initialized = True # Prevent infinite retry loops that drain database connections
 
 # ----------------- UTILS -----------------
 
