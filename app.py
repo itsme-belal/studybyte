@@ -242,6 +242,15 @@ def check_and_freeze_slots():
 
 # ----------------- ROUTES -----------------
 
+@app.route('/db-test')
+def db_test():
+    global _db_initialized
+    try:
+        db.create_all()
+        return "Database connected and tables created successfully! Your URL is correct."
+    except Exception as e:
+        return f"DATABASE CONNECTION FAILED. ERROR DETAILS: {str(e)} <br><br> Make sure you did NOT leave brackets [ ] around your password in the Supabase URL, and if your password contains special characters like @ or #, you MUST change your database password in Supabase to only use letters and numbers!"
+
 @app.route('/')
 def index():
     return render_template('index.html')
