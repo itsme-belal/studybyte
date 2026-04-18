@@ -382,6 +382,51 @@ def login():
         flash('Invalid credentials.', 'error')
     return render_template('login.html')
 
+@app.route('/google_auth', methods=['POST'])
+def google_auth():
+    flash('Google Authentication requires Google Cloud API Keys. For now, please login or register using your standard student email!', 'warning')
+    return redirect(url_for('login'))
+
+@app.route('/forgot_password', methods=['GET', 'POST'])
+def forgot_password():
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip()
+        user = User.query.filter_by(email=email).first()
+        if user:
+            # We don't have an email server, so we reset the password automatically and inform them
+            user.password_hash = generate_password_hash('123456')
+            db.session.commit()
+            flash('Your password has been successfully reset to: 123456. Please login and change it immediately from your profile settings.', 'success')
+            return redirect(url_for('login'))
+        else:
+            flash('No account found with that email address.', 'error')
+    return render_template('forgot_password.html')
+
+@app.route('/change_password', methods=['POST'])
+@login_required
+def change_password():
+    user = User.query.get(session['user_id'])
+    current_pw = request.form.get('current_password')
+    new_pw = request.form.get('new_password')
+    confirm_pw = request.form.get('confirm_password')
+    
+    if not check_password_hash(user.password_hash, current_pw):
+        flash('Current password is incorrect!', 'error')
+        return redirect(url_for('view_profile', user_id=user.id))
+        
+    if new_pw != confirm_pw:
+        flash('New passwords do not match!', 'error')
+        return redirect(url_for('view_profile', user_id=user.id))
+        
+    if len(new_pw) < 6:
+        flash('New password must be at least 6 characters long.', 'error')
+        return redirect(url_for('view_profile', user_id=user.id))
+        
+    user.password_hash = generate_password_hash(new_pw)
+    db.session.commit()
+    flash('Your password has been securely updated!', 'success')
+    return redirect(url_for('view_profile', user_id=user.id))
+
 @app.route('/set_theme', methods=['POST'])
 @login_required
 def set_theme():
