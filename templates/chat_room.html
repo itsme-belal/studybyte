@@ -1,71 +1,437 @@
 {% extends "base.html" %}
+{% block title %}Chat — {{ booking.listing.title }}{% endblock %}
+
 {% block content %}
-<div class="flex justify-between items-center mb-4">
-    <h2>Communication: {{ booking.listing.title }}</h2>
-    <a href="{{ url_for('dashboard') }}" class="btn btn-outline text-sm">Back to Dashboard</a>
+<style>
+/* ── Chat Room Styles ──────────────── */
+
+/* Override container for chat page — no extra padding needed */
+.container { padding: 1rem !important; }
+
+.chat-layout {
+    display:grid;
+    grid-template-columns:1fr 320px;
+    gap:1.25rem;
+    height:calc(100vh - 120px);
+    min-height:500px;
+}
+@media(max-width:900px) { .chat-layout { grid-template-columns:1fr; height:auto; } }
+
+/* Main Chat Area */
+.chat-main {
+    display:flex; flex-direction:column;
+    border:1px solid rgba(0,212,170,0.2);
+    border-radius:1.25rem; overflow:hidden;
+    background:linear-gradient(145deg,rgba(10,18,40,0.85),rgba(5,10,23,0.95));
+    backdrop-filter:blur(30px);
+    box-shadow:0 20px 60px rgba(0,0,0,0.5),0 0 0 1px rgba(0,212,170,0.06);
+    position:relative;
+    height:100%;
+    min-height:0;
+}
+.chat-main::before {
+    content:''; position:absolute; top:0;left:0;right:0; height:2px;
+    background:linear-gradient(90deg,transparent,#00d4aa,#7c3aed,transparent);
+    animation:gradShift 4s linear infinite; background-size:300%;
+}
+
+/* Chat Header */
+.chat-header {
+    padding:1rem 1.25rem;
+    border-bottom:1px solid rgba(0,212,170,0.12);
+    display:flex; align-items:center; justify-content:space-between;
+    background:rgba(0,212,170,0.04);
+    flex-shrink:0;
+}
+.chat-header-info { display:flex; align-items:center; gap:10px; }
+.chat-avatar {
+    width:38px; height:38px; border-radius:50%;
+    background:linear-gradient(135deg,#00d4aa,#7c3aed);
+    display:flex;align-items:center;justify-content:center;
+    font-size:1rem; box-shadow:0 4px 12px rgba(0,212,170,0.35);
+}
+.online-dot {
+    width:8px;height:8px;border-radius:50%;background:#00ff88;
+    box-shadow:0 0 8px #00ff88;
+    animation:pulse-anim 2s ease-in-out infinite;
+}
+@keyframes pulse-anim {
+    0%,100%{ box-shadow:0 0 4px #00ff88; }
+    50%{ box-shadow:0 0 12px #00ff88,0 0 20px rgba(0,255,136,0.3); }
+}
+
+/* Messages Area */
+.chat-messages {
+    flex-grow:1; overflow-y:auto;
+    padding:1rem 1.25rem;
+    display:flex; flex-direction:column; gap:0.75rem;
+    scroll-behavior:smooth;
+}
+.chat-messages::-webkit-scrollbar { width:3px; }
+.chat-messages::-webkit-scrollbar-thumb { background:rgba(0,212,170,0.2); border-radius:2px; }
+
+/* Message Bubbles */
+@keyframes msg-in {
+    from { opacity:0; transform:translateY(10px) scale(0.97); }
+    to   { opacity:1; transform:translateY(0) scale(1); }
+}
+.msg-row {
+    display:flex; align-items:flex-end; gap:8px;
+    animation:msg-in 0.3s ease forwards;
+    width:100%;
+}
+.msg-row.self { flex-direction:row-reverse; }
+.msg-avatar-sm {
+    width:26px; height:26px; border-radius:50%; flex-shrink:0;
+    background:linear-gradient(135deg,#00d4aa,#7c3aed);
+    display:flex; align-items:center; justify-content:center;
+    font-size:0.65rem; font-weight:700; color:#050a17;
+    margin-bottom:2px;
+}
+/* Inner wrap must NOT inherit reversed flex direction */
+.msg-wrap {
+    display:flex; flex-direction:column;
+    max-width:72%; min-width:0;
+    align-items:flex-start;
+}
+.msg-row.self .msg-wrap { align-items:flex-end; }
+
+.msg-bubble {
+    padding:9px 14px;
+    border-radius:16px; font-size:0.84rem; line-height:1.6;
+    overflow-wrap:break-word; word-break:normal;
+    white-space:pre-wrap;
+    min-width:44px; max-width:100%;
+    display:inline-block;
+}
+.msg-bubble.other {
+    background:rgba(0,212,170,0.08);
+    border:1px solid rgba(0,212,170,0.15);
+    color:#e2e8f0;
+    border-bottom-left-radius:4px;
+}
+.msg-bubble.self {
+    background:linear-gradient(135deg,rgba(0,212,170,0.2),rgba(124,58,237,0.2));
+    border:1px solid rgba(0,212,170,0.3);
+    color:#f1f5f9;
+    border-bottom-right-radius:4px;
+}
+.msg-meta {
+    font-size:0.62rem; color:#64748b; margin-top:3px;
+    text-align:right; padding:0 2px;
+}
+.msg-meta.other { text-align:left; }
+
+/* Date divider */
+.date-divider {
+    display:flex; align-items:center; gap:1rem;
+    color:#334155; font-size:0.68rem; letter-spacing:0.08em;
+    text-transform:uppercase;
+}
+.date-divider::before,.date-divider::after {
+    content:'';flex:1;height:1px;
+    background:linear-gradient(90deg,transparent,rgba(148,163,184,0.1),transparent);
+}
+
+/* Chat Input */
+.chat-input-area {
+    padding:1rem 1.25rem;
+    border-top:1px solid rgba(0,212,170,0.1);
+    background:rgba(0,0,0,0.25);
+    flex-shrink:0;
+}
+.chat-input-row { display:flex; gap:0.6rem; align-items:center; }
+#message-input {
+    flex-grow:1; padding:0.7rem 1rem;
+    border:1px solid rgba(0,212,170,0.2) !important;
+    border-radius:9999px;
+    background:rgba(0,212,170,0.04) !important;
+    color:#e2e8f0 !important; font-size:0.85rem;
+    font-family:inherit; outline:none;
+    transition:0.2s;
+}
+#message-input:focus {
+    border-color:rgba(0,212,170,0.5) !important;
+    background:rgba(0,212,170,0.07) !important;
+    box-shadow:0 0 0 3px rgba(0,212,170,0.08) !important;
+}
+#message-input::placeholder { color:rgba(100,116,139,0.7) !important; }
+.send-btn {
+    width:42px; height:42px; border-radius:50%; flex-shrink:0;
+    background:linear-gradient(135deg,#00d4aa,#7c3aed);
+    border:none; cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 4px 15px rgba(0,212,170,0.35);
+    transition:all 0.2s ease;
+}
+.send-btn:hover { transform:scale(1.1); box-shadow:0 6px 20px rgba(0,212,170,0.5); }
+.send-btn:active { transform:scale(0.95); }
+
+/* Sidebar */
+.chat-sidebar { display:flex; flex-direction:column; gap:1rem; overflow-y:auto; }
+
+.sidebar-card {
+    background:linear-gradient(145deg,rgba(10,18,40,0.85),rgba(5,10,23,0.9));
+    border:1px solid rgba(148,163,184,0.1);
+    border-radius:1.1rem; padding:1.25rem;
+    backdrop-filter:blur(20px);
+    transition:border-color 0.3s;
+}
+.sidebar-card:hover { border-color:rgba(0,212,170,0.2); }
+.sidebar-card-title {
+    font-size:0.78rem; font-weight:700;
+    color:#00d4aa; letter-spacing:0.08em;
+    text-transform:uppercase; margin-bottom:1rem;
+    display:flex;align-items:center;gap:6px;
+}
+
+/* Typing indicator */
+.typing-indicator {
+    display:flex; align-items:center; gap:8px;
+    font-size:0.75rem; color:#64748b;
+    padding:6px 0;
+}
+.typing-indicator span {
+    width:6px;height:6px;border-radius:50%;background:#00d4aa;
+    animation:typing-bounce 1.2s ease-in-out infinite;
+}
+.typing-indicator span:nth-child(2){animation-delay:0.2s;}
+.typing-indicator span:nth-child(3){animation-delay:0.4s;}
+@keyframes typing-bounce{0%,80%,100%{transform:scale(0.6);opacity:0.4}40%{transform:scale(1);opacity:1}}
+</style>
+
+<!-- Header -->
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:0.5rem;">
+    <div>
+        <h2 style="font-size:1.2rem;font-weight:800;color:var(--text-heading);margin-bottom:2px;">
+            💬 {{ booking.listing.title }}
+        </h2>
+        <p style="font-size:0.78rem;color:var(--text-muted);">Real-Time Session Chat</p>
+    </div>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-outline" style="font-size:0.8rem;padding:0.4rem 1rem;">
+        ← Back to Dashboard
+    </a>
 </div>
 
-<div class="dashboard-grid" style="grid-template-columns: 2fr 1fr;">
-    <!-- Chat Area -->
-    <div class="card flex flex-col h-[600px] border border-gray-700 rounded-xl overflow-hidden shadow-lg p-0 bg-[#1e293b]">
-        <div class="p-4 bg-[#0f172a] border-b border-gray-700 flex items-center justify-between shadow-sm">
-            <h3 class="font-bold text-teal-400">Real-Time Chat</h3>
-        </div>
-        
-        <div id="chat-messages" class="flex-grow overflow-y-auto p-4 flex flex-col gap-4 bg-[#1e293b]">
-            {% for msg in messages %}
-                <div class="flex flex-col {% if msg.sender_id == session.user_id %}items-end{% else %}items-start{% endif %} w-full">
-                    <span class="text-[10px] text-gray-400 mb-1 px-1">
-                        {% if msg.sender_id == session.user_id %}You{% else %}{{ msg.sender.name }}{% endif %} • {{ msg.timestamp.strftime('%H:%M') }}
-                    </span>
-                    <div class="max-w-[75%] px-4 py-2 text-sm shadow inline-block break-words {% if msg.sender_id == session.user_id %}bg-teal-600 text-white rounded-2xl rounded-tr-sm{% else %}bg-gray-700 text-gray-100 rounded-2xl rounded-tl-sm{% endif %}">
-                        {{ msg.message }}
+<div class="chat-layout">
+    <!-- ── Chat Main ── -->
+    <div class="chat-main">
+        <!-- Header -->
+        <div class="chat-header">
+            <div class="chat-header-info">
+                <div class="chat-avatar">💬</div>
+                <div>
+                    <div style="font-weight:700;font-size:0.88rem;color:#f8fafc;">Session Chat</div>
+                    <div style="display:flex;align-items:center;gap:5px;margin-top:2px;">
+                        <div class="online-dot"></div>
+                        <span style="font-size:0.68rem;color:#64748b;letter-spacing:0.04em;">LIVE</span>
                     </div>
                 </div>
+            </div>
+            <div style="font-size:0.72rem;color:#334155;text-align:right;">
+                <div style="color:#64748b;">Booking #{{ booking.id }}</div>
+                <div style="color:{% if booking.status == 'Confirmed' %}#00d4aa{% else %}#f59e0b{% endif %};">
+                    {{ booking.status }}
+                </div>
+                {% if booking.status == 'Confirmed' %}
+                <div id="session-status-hdr" style="color:#f59e0b;font-size:0.65rem;margin-top:2px;font-weight:600;"></div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Messages -->
+        <div class="chat-messages" id="chat-messages">
+            <div class="date-divider">Today</div>
+            {% for msg in messages %}
+            <div class="msg-row {% if msg.sender_id == session.user_id %}self{% endif %}">
+                {% if msg.sender_id != session.user_id %}
+                <div class="msg-avatar-sm">{{ msg.sender.name[0]|upper }}</div>
+                {% endif %}
+                <div class="msg-wrap">
+                    <div class="msg-bubble {% if msg.sender_id == session.user_id %}self{% else %}other{% endif %}">
+                        {{ msg.message }}
+                    </div>
+                    {% if msg.sender_id == session.user_id %}
+                    <div class="msg-meta">{{ msg.timestamp.strftime('%H:%M') }}</div>
+                    {% else %}
+                    <div class="msg-meta other">{{ msg.sender.name }} · {{ msg.timestamp.strftime('%H:%M') }}</div>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <div style="text-align:center;padding:2rem;color:#334155;font-size:0.82rem;">
+                <div style="font-size:2rem;margin-bottom:0.5rem;">👋</div>
+                Start the conversation!
+            </div>
             {% endfor %}
         </div>
-        
-        <div class="p-3 bg-[#0f172a] border-t border-gray-700">
-            <form id="chat-form" class="flex gap-2 items-center">
-                <input type="text" id="message-input" class="w-full bg-gray-800 text-gray-100 border border-gray-600 rounded-full py-2 px-4 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 text-sm transition-all" placeholder="Type your message..." required autocomplete="off">
-                <button type="submit" class="bg-teal-600 hover:bg-teal-500 text-white rounded-full px-5 py-2 font-semibold transition-colors shadow">Send</button>
+
+        <!-- Session-end review panel (hidden until session ends) -->
+        <div id="session-end-panel" style="display:none;margin:0 1.25rem 0.5rem;padding:1rem;border-radius:0.85rem;
+            background:linear-gradient(135deg,rgba(245,158,11,0.08),rgba(124,58,237,0.08));
+            border:1px solid rgba(245,158,11,0.25);">
+            <div style="font-size:0.8rem;font-weight:700;color:#f59e0b;margin-bottom:0.6rem;display:flex;align-items:center;gap:6px;">
+                <span id="panel-icon">⏰</span> <span id="panel-title">Session Ended — Awaiting Review</span>
+            </div>
+            <p style="font-size:0.75rem;color:#94a3b8;margin-bottom:0.85rem;line-height:1.5;">
+                The session time is over. Please confirm the session was completed, or report an issue.
+                Payment releases automatically when both parties confirm.
+            </p>
+            <div style="display:flex;gap:0.6rem;flex-wrap:wrap;">
+                {% if booking.status == 'Confirmed' %}
+                    {% if session.user_id == booking.learner_id and not booking.learner_confirmed %}
+                    <form method="POST" action="{{ url_for('check_in_session', booking_id=booking.id) }}">
+                        <button class="btn btn-primary" style="font-size:0.78rem;padding:0.45rem 1rem;">
+                            ✅ Confirm Session Complete
+                        </button>
+                    </form>
+                    {% elif session.user_id == booking.listing.tutor_id and not booking.tutor_confirmed %}
+                    <form method="POST" action="{{ url_for('check_in_session', booking_id=booking.id) }}">
+                        <button class="btn btn-primary" style="font-size:0.78rem;padding:0.45rem 1rem;">
+                            ✅ Confirm Session Complete
+                        </button>
+                    </form>
+                    {% else %}
+                    <span style="font-size:0.78rem;color:#00d4aa;padding:0.45rem 1rem;border:1px solid rgba(0,212,170,0.3);border-radius:0.5rem;">
+                        ✔ You confirmed. Waiting for other party…
+                    </span>
+                    {% endif %}
+                    <a href="{{ url_for('report_dispute', booking_id=booking.id) }}"
+                        class="btn btn-outline" style="font-size:0.78rem;padding:0.45rem 1rem;border-color:rgba(239,68,68,0.4);color:#f87171;"
+                        onclick="return confirm('Report an issue with this session?')">
+                        ⚠️ Report Issue
+                    </a>
+                {% elif booking.status == 'Completed' %}
+                <span style="font-size:0.78rem;color:#00d4aa;padding:0.45rem 1rem;border:1px solid rgba(0,212,170,0.2);border-radius:0.5rem;">
+                    ✅ Session Completed — Payment Released
+                </span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Typing indicator slot -->
+        <div id="typing-row" style="padding:0 1.25rem 4px;display:none;">
+            <div class="typing-indicator">
+                <span></span><span></span><span></span>
+                <span style="background:none;width:auto;height:auto;border-radius:0;animation:none;opacity:1;color:#64748b;">typing...</span>
+            </div>
+        </div>
+
+        <!-- Input area -->
+        <div class="chat-input-area">
+            <form id="chat-form" class="chat-input-row">
+                <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" required>
+                <button type="submit" class="send-btn" title="Send">
+                    <i class="fa-solid fa-paper-plane" style="color:#050a17;font-size:0.8rem;margin-left:1px;"></i>
+                </button>
             </form>
         </div>
     </div>
 
-    <!-- Sidebar Info / Meeting / Materials -->
-    <div style="display: flex; flex-direction: column; gap: 1rem;">
-        <!-- Meeting Info -->
-        <div class="card">
-            <h3 class="mb-2">Video Meeting</h3>
+    <!-- ── Chat Sidebar ── -->
+    <div class="chat-sidebar">
+        <!-- Video Meeting -->
+        <div class="sidebar-card">
+            <div class="sidebar-card-title"><i class="fa-solid fa-video"></i> Video Session</div>
             {% if meeting %}
-                <p class="text-sm text-muted mb-4">Click below to join the secure Jitsi meeting space for this session.</p>
-                <a href="https://meet.jit.si/{{ meeting.room_name }}" target="_blank" class="btn btn-secondary w-full text-center" style="display:block;">Join Video Session</a>
+            <p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:1rem;line-height:1.5;">Click below to join your secure Jitsi meeting room.</p>
+            <a href="https://meet.jit.si/{{ meeting.room_name }}" target="_blank" class="btn btn-primary" style="width:100%;text-align:center;display:block;font-size:0.82rem;">
+                <i class="fa-solid fa-video" style="font-size:0.75rem;"></i> Join Video Call
+            </a>
             {% else %}
-                <p class="text-sm text-muted text-warning">Meeting room not generated. Booking must be confirmed.</p>
+            <div style="text-align:center;padding:1rem 0;">
+                <div style="font-size:2rem;margin-bottom:0.5rem;opacity:0.4;">🎥</div>
+                <p style="font-size:0.78rem;color:#f59e0b;">Meeting room available once booking is confirmed.</p>
+            </div>
             {% endif %}
         </div>
 
-        <!-- Materials Info -->
-        <div class="card">
-            <h3 class="mb-2">Course Materials</h3>
-            <div class="materials-list mb-4" style="max-height: 200px; overflow-y:auto;">
-                {% for mat in materials %}
-                <div class="pb-2 border-bottom mb-2 flex justify-between items-center" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);">
-                    <span class="text-sm" title="{{ mat.original_name }}" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%;">{{ mat.original_name }}</span>
-                    <a href="{{ url_for('download_material', mat_id=mat.id) }}" class="text-teal text-xs hover:underline" style="flex-shrink:0;">Download</a>
+        <!-- ── Session Control (Tutor) ── -->
+        {% if booking.status == 'Confirmed' %}
+        <div class="sidebar-card" style="border-color:rgba(0,212,170,0.2);">
+            <div class="sidebar-card-title" style="color:#f59e0b;">
+                <i class="fa-solid fa-circle-stop"></i> Session Control
+            </div>
+
+            <!-- Tutor: End Session / Confirm -->
+            {% if session.user_id == booking.listing.tutor_id %}
+                {% if booking.tutor_confirmed %}
+                <div style="padding:0.75rem;border-radius:0.6rem;background:rgba(0,212,170,0.07);
+                    border:1px solid rgba(0,212,170,0.15);text-align:center;font-size:0.78rem;color:#00d4aa;">
+                    ✅ You confirmed. Waiting for learner to confirm to release payment.
                 </div>
                 {% else %}
-                <p class="text-xs text-muted py-2">No materials uploaded yet.</p>
+                <p style="font-size:0.75rem;color:#94a3b8;line-height:1.5;margin-bottom:0.75rem;">
+                    Mark session as complete from your side. Payment releases automatically when learner also confirms.
+                </p>
+                <form method="POST" action="{{ url_for('check_in_session', booking_id=booking.id) }}"
+                    onsubmit="return confirm('End this session and confirm completion? Payment will auto-release once the learner also confirms.')">
+                    <button type="submit" class="btn btn-primary"
+                        style="width:100%;font-size:0.8rem;padding:0.55rem;
+                        background:linear-gradient(135deg,#f59e0b,#d97706);border:none;color:#000;">
+                        🛑 End Session &amp; Confirm
+                    </button>
+                </form>
+                {% endif %}
+
+            <!-- Learner: Confirm side -->
+            {% elif session.user_id == booking.learner_id %}
+                {% if booking.learner_confirmed %}
+                <div style="padding:0.75rem;border-radius:0.6rem;background:rgba(0,212,170,0.07);
+                    border:1px solid rgba(0,212,170,0.15);text-align:center;font-size:0.78rem;color:#00d4aa;">
+                    ✅ You confirmed. Waiting for tutor to confirm.
+                </div>
+                {% else %}
+                <p style="font-size:0.75rem;color:#94a3b8;line-height:1.5;margin-bottom:0.75rem;">
+                    Happy with the session? Confirm your side to release payment to tutor.
+                </p>
+                <form method="POST" action="{{ url_for('check_in_session', booking_id=booking.id) }}"
+                    onsubmit="return confirm('Confirm session was completed? This cannot be undone.')">
+                    <button type="submit" class="btn btn-primary"
+                        style="width:100%;font-size:0.8rem;padding:0.55rem;">
+                        ✅ Confirm Session Complete
+                    </button>
+                </form>
+                {% endif %}
+            {% endif %}
+
+            <!-- Both: Dispute / Unfreeze link available always -->
+            <div style="border-top:1px solid rgba(148,163,184,0.08);margin-top:0.85rem;padding-top:0.85rem;">
+                <a href="{{ url_for('report_dispute', booking_id=booking.id) }}"
+                    style="display:block;text-align:center;font-size:0.73rem;color:#f87171;
+                    border:1px solid rgba(239,68,68,0.25);border-radius:0.5rem;padding:0.4rem;
+                    text-decoration:none;transition:all 0.2s;"
+                    onmouseover="this.style.background='rgba(239,68,68,0.06)'"
+                    onmouseout="this.style.background='transparent'">
+                    ⚖️ Request Dispute / Payment Unfreeze
+                </a>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Materials -->
+        <div class="sidebar-card" style="flex-grow:1;">
+            <div class="sidebar-card-title"><i class="fa-solid fa-file"></i> Course Materials</div>
+
+            <div style="max-height:200px;overflow-y:auto;margin-bottom:1rem;display:flex;flex-direction:column;gap:0.5rem;">
+                {% for mat in materials %}
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-radius:0.5rem;background:rgba(0,212,170,0.04);border:1px solid rgba(0,212,170,0.1);">
+                    <span style="font-size:0.75rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:75%;" title="{{ mat.original_name }}">
+                        📄 {{ mat.original_name }}
+                    </span>
+                    <a href="{{ url_for('download_material', mat_id=mat.id) }}" style="font-size:0.7rem;color:#00d4aa;font-weight:600;flex-shrink:0;text-decoration:none;">↓ Get</a>
+                </div>
+                {% else %}
+                <p style="font-size:0.78rem;color:#334155;text-align:center;padding:0.75rem 0;">No materials yet.</p>
                 {% endfor %}
             </div>
-            
+
             {% if session.user_id == booking.listing.tutor_id %}
-            <div style="border-top: 1px solid var(--border); padding-top: 10px;">
-                <h4 class="text-xs text-muted mb-2">Upload Material</h4>
+            <div style="border-top:1px solid var(--border);padding-top:1rem;">
+                <p style="font-size:0.7rem;color:#64748b;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:0.6rem;">Upload Material</p>
                 <form action="{{ url_for('upload_material', booking_id=booking.id) }}" method="POST" enctype="multipart/form-data">
-                    <input type="file" name="material" class="form-control mb-2 text-xs" style="padding: 5px;" required>
-                    <button type="submit" class="btn btn-outline w-full text-xs py-1" style="width: 100%;">Upload File</button>
+                    <input type="file" name="material" class="form-control" required style="font-size:0.78rem;padding:5px;margin-bottom:0.5rem;">
+                    <button type="submit" class="btn btn-outline" style="width:100%;font-size:0.78rem;padding:0.4rem;">Upload File</button>
                 </form>
             </div>
             {% endif %}
@@ -75,48 +441,98 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
 <script>
-    const socket = io();
-    const room = "{{ booking.id }}";
-    const currentUserId = "{{ session.user_id }}";
+const socket = io();
+const room   = "{{ booking.id }}";
+const myId   = "{{ session.user_id }}";
+const myInitial = "{{ current_user.name[0]|upper if current_user else 'U' }}";
 
-    socket.on('connect', function() {
-        socket.emit('join', {room: room});
-    });
+socket.on('connect', () => socket.emit('join', {room}));
 
-    socket.on('receive_message', function(data) {
-        const msgContainer = document.getElementById('chat-messages');
-        const isSelf = data.sender_id == currentUserId;
-        
-        const outerDiv = document.createElement('div');
-        outerDiv.className = `flex flex-col w-full ${isSelf ? 'items-end' : 'items-start'}`;
-        
-        const nameSpan = document.createElement('span');
-        nameSpan.className = 'text-[10px] text-gray-400 mb-1 px-1';
-        nameSpan.innerText = `${isSelf ? 'You' : data.sender_name} • ${data.timestamp}`;
-        
-        const contentDiv = document.createElement('div');
-        contentDiv.className = `max-w-[75%] px-4 py-2 text-sm shadow inline-block break-words ${isSelf ? 'bg-teal-600 text-white rounded-2xl rounded-tr-sm' : 'bg-gray-700 text-gray-100 rounded-2xl rounded-tl-sm'}`;
-        contentDiv.innerText = data.message;
-        
-        outerDiv.appendChild(nameSpan);
-        outerDiv.appendChild(contentDiv);
-        msgContainer.appendChild(outerDiv);
-        
-        msgContainer.scrollTop = msgContainer.scrollHeight;
-    });
+// ── Session Countdown Timer ──
+const sessionDate = "{{ booking.slot.date }}";
+const sessionEnd  = "{{ booking.slot.end_time }}";
+const bookingStatus = "{{ booking.status }}";
 
-    document.getElementById('chat-form').onsubmit = function(e) {
-        e.preventDefault();
-        const input = document.getElementById('message-input');
-        const msg = input.value;
-        if(msg.trim() !== '') {
-            socket.emit('send_message', {room: room, message: msg});
-            input.value = '';
-        }
-    };
-    
-    // Auto scroll bottom on load
-    const msgContainer = document.getElementById('chat-messages');
-    msgContainer.scrollTop = msgContainer.scrollHeight;
+function checkSessionEnd() {
+    if (bookingStatus !== 'Confirmed') return;
+    const endDt = new Date(sessionDate + 'T' + sessionEnd + ':00');
+    const now   = new Date();
+    const diffMs = endDt - now;
+
+    const hdr = document.getElementById('session-status-hdr');
+    const panel = document.getElementById('session-end-panel');
+
+    if (diffMs <= 0) {
+        // Session has ended — show panel
+        if (panel) panel.style.display = 'block';
+        if (hdr)   { hdr.textContent = 'Session Ended'; hdr.style.color = '#f59e0b'; }
+    } else {
+        // Show countdown
+        const m = Math.floor(diffMs / 60000);
+        const s = Math.floor((diffMs % 60000) / 1000);
+        if (hdr) hdr.textContent = `Ends in ${m}m ${s}s`;
+    }
+}
+
+if (bookingStatus === 'Confirmed') {
+    checkSessionEnd();
+    setInterval(checkSessionEnd, 10000); // check every 10s
+}
+
+function makeMsg(text, isSelf, senderName, timestamp) {
+    const row = document.createElement('div');
+    row.className = `msg-row${isSelf ? ' self' : ''}`;
+    row.style.animation = 'msg-in 0.3s ease forwards';
+
+    if (!isSelf) {
+        const av = document.createElement('div');
+        av.className = 'msg-avatar-sm';
+        av.textContent = (senderName || '?')[0].toUpperCase();
+        row.appendChild(av);
+    }
+
+    // Use msg-wrap so flex-direction:column is preserved correctly
+    const wrap = document.createElement('div');
+    wrap.className = 'msg-wrap';
+
+    const bubble = document.createElement('div');
+    bubble.className = `msg-bubble ${isSelf ? 'self' : 'other'}`;
+    bubble.textContent = text;
+    wrap.appendChild(bubble);
+
+    const meta = document.createElement('div');
+    meta.className = `msg-meta${isSelf ? '' : ' other'}`;
+    meta.textContent = isSelf ? (timestamp || '') : ((senderName || '') + ' · ' + (timestamp || ''));
+    wrap.appendChild(meta);
+
+    row.appendChild(wrap);
+    return row;
+}
+
+socket.on('receive_message', function(data) {
+    const msgs = document.getElementById('chat-messages');
+    const isSelf = data.sender_id == myId;
+    msgs.appendChild(makeMsg(data.message, isSelf, data.sender_name, data.timestamp));
+    msgs.scrollTop = msgs.scrollHeight;
+});
+
+let typingTimer;
+document.getElementById('message-input').addEventListener('input', () => {
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(() => {}, 2000);
+});
+
+document.getElementById('chat-form').onsubmit = function(e) {
+    e.preventDefault();
+    const input = document.getElementById('message-input');
+    const msg   = input.value.trim();
+    if (!msg) return;
+    socket.emit('send_message', {room, message: msg});
+    input.value = '';
+    input.focus();
+};
+
+const msgs = document.getElementById('chat-messages');
+msgs.scrollTop = msgs.scrollHeight;
 </script>
 {% endblock %}

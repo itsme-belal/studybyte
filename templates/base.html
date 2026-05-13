@@ -3,22 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}StudyByte - EWU Micro-Tutoring{% endblock %}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <title>{% block title %}StudyByte — Smart Micro-Tutoring Platform{% endblock %}</title>
+    <meta name="description" content="StudyByte is a premium micro-tutoring platform connecting learners with expert tutors.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        .block { display: block; }
-        .text-xs { font-size: 0.75rem; }
-        .text-3xl { font-size: 1.875rem; }
-        .font-bold { font-weight: bold; }
-        .w-full { width: 100%; }
-        .mb-2 { margin-bottom: 0.5rem; }
-        .mb-4 { margin-bottom: 1rem; }
-        .py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
-    </style>
     <script>
-        // Init theme early to prevent flash
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'neon-teal': '#00d4aa',
+                        'neon-green': '#00ff88',
+                        'neon-purple': '#7c3aed',
+                        'neon-pink': '#ff2d9f',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Init theme ASAP to prevent flash -->
+    <script>
         const preferredTheme = "{{ current_user.theme_preference if current_user else 'system' }}";
         let themeToApply = preferredTheme;
         if (themeToApply === 'system') {
@@ -26,127 +33,750 @@
         }
         document.documentElement.setAttribute('data-theme', themeToApply);
     </script>
-</head>
-<body data-theme-pref="{{ current_user.theme_preference if current_user else 'system' }}">
-    <!-- 3D Interesting Background Video -->
-    <video autoplay loop muted playsinline id="bg-video" style="position: fixed; right: 0; bottom: 0; min-width: 100%; min-height: 100%; width: auto; height: auto; z-index: -1000; object-fit: cover; opacity: 0.15;">
-        <source src="{{ url_for('static', filename='video/bg.mp4') }}" type="video/mp4">
-    </video>
-    
-    <nav class="navbar">
-        <a href="{{ url_for('index') }}" class="nav-brand">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
-            Study<span>Byte</span>
-        </a>
-        <div class="nav-links">
-            <a href="{{ url_for('index') }}" class="nav-item">Home</a>
-            <a href="{{ url_for('about') }}" class="nav-item">About</a>
-            <a href="{{ url_for('marketplace') }}" class="nav-item border-l pl-4 ms-2">Marketplace</a>
-            <a href="{{ url_for('tutor_search') }}" class="nav-item border-l pl-4 ms-2">Find Tutors</a>
-            {% if session.user_id %}
-                
-                {% if session.role in ['learner', 'tutor'] %}
-                <a href="{{ url_for('dashboard') }}" class="nav-item">Dashboard</a>
-                {% endif %}
 
-                {% if session.role == 'admin' %}
-                <a href="{{ url_for('admin_dashboard') }}" class="nav-item">Admin Panel</a>
-                {% endif %}
-                
-                {% if current_user.role != 'admin' %}
-                <a href="{{ url_for('wallet') }}" class="wallet-badge" title="1 Token = 0.50 BDT">
-                    🪙 {{ wallet.balance if wallet else 0 }} Tokens ({{ (wallet.balance * 0.50)|round(2) if wallet else 0 }} BDT)
-                </a>
-                
-                <form action="{{ url_for('switch_role', role='tutor' if session.role == 'learner' else 'learner') }}" class="inline" style="display:inline;">
-                    <button type="submit" class="btn btn-outline btn-sm" style="padding: 0.3rem 0.6rem;">Switch to {{ 'Tutor' if session.role == 'learner' else 'Learner' }}</button>
-                </form>
-                {% endif %}
-                
-                <select id="theme-selector" class="form-control" style="width:auto; padding: 0.2rem; font-size: 0.8rem; background: var(--bg-dark); color: var(--text-main);" onchange="updateTheme(this.value)">
-                    <option value="system" {% if current_user.theme_preference == 'system' %}selected{% endif %}>🖥️ System</option>
-                    <option value="light" {% if current_user.theme_preference == 'light' %}selected{% endif %}>☀️ Light</option>
-                    <option value="dark" {% if current_user.theme_preference == 'dark' %}selected{% endif %}>🌙 Dark</option>
-                </select>
+    <style>
+        /* ── Loading Screen ───────────────────── */
+        #page-loader {
+            position: fixed; inset: 0; z-index: 99999;
+            background: #050a17;
+            display: flex; align-items: center; justify-content: center;
+            flex-direction: column; gap: 1.5rem;
+            transition: opacity 0.6s ease, visibility 0.6s ease;
+        }
+        #page-loader.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
 
-                <a href="{{ url_for('profile') }}" class="nav-item">Profile</a>
-                <a href="{{ url_for('logout') }}" class="btn btn-outline">Logout</a>
-            {% else %}
-                <a href="{{ url_for('login') }}" class="nav-item">Login</a>
-                <a href="{{ url_for('register') }}" class="btn btn-primary">Sign Up</a>
-            {% endif %}
-        </div>
-    </nav>
+        .loader-logo {
+            font-size: 2.5rem; font-weight: 900; letter-spacing: -1px;
+            color: #00d4aa;
+            animation: loader-pulse 1.2s ease-in-out infinite alternate;
+        }
+        .loader-logo span { color: #e2e8f0; }
 
-    <div class="container">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                <div class="flash-messages">
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ category }}">{{ message }}</div>
-                    {% endfor %}
-                </div>
-            {% endif %}
-        {% endwith %}
-
-        {% if unread_notifications %}
-            <div id="notifications-box" class="card mb-4" style="background: rgba(13, 148, 136, 0.1); border-color: var(--accent-teal);">
-                <div class="flex justify-between items-center mb-2">
-                    <strong class="text-teal">🔔 You have {{ unread_notifications|length }} new notification(s)</strong>
-                    <button class="btn btn-sm btn-outline text-xs" onclick="dismissNotifications()">Dismiss All</button>
-                </div>
-                {% for n in unread_notifications %}
-                    <div class="text-sm border-bottom pb-1 mb-1">
-                        {{ n.message }}
-                        {% if n.action_url %}
-                            <a href="{{ n.action_url }}" class="text-warning ml-2 font-bold">Action Needed &rarr;</a>
-                        {% endif %}
-                    </div>
-                {% endfor %}
-            </div>
-            <script>
-                function dismissNotifications() {
-                    fetch('{{ url_for("read_notifications") }}', {method: 'POST'})
-                    .then(() => document.getElementById('notifications-box').style.display = 'none');
-                }
-            </script>
-        {% endif %}
-
-        {% block content %}{% endblock %}
-    </div>
-
-    <!-- Theme Selection Handler -->
-    <script>
-        function updateTheme(theme) {
-            let apply = theme;
-            if (theme === 'system') {
-                apply = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-            }
-            document.documentElement.setAttribute('data-theme', apply);
-            
-            // If logged in, save to backend
-            {% if session.user_id %}
-            fetch('{{ url_for("set_theme") }}', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ theme: theme })
-            });
-            {% endif %}
+        @keyframes loader-pulse {
+            from { opacity: 0.4; filter: drop-shadow(0 0 0px #00d4aa); }
+            to   { opacity: 1;   filter: drop-shadow(0 0 20px #00d4aa); }
         }
 
-        // Listen for system preference changes if using 'system'
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
-            const currentPref = document.body.getAttribute('data-theme-pref');
-            if (currentPref === 'system') {
-                document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
-            }
+        .loader-bar {
+            width: 200px; height: 2px;
+            background: rgba(255,255,255,0.1); border-radius: 1px; overflow: hidden;
+        }
+        .loader-bar-fill {
+            height: 100%; width: 0%;
+            background: linear-gradient(90deg, #00d4aa, #7c3aed, #00d4aa);
+            background-size: 200%;
+            animation: loader-bar-anim 1.2s ease-in-out forwards, gradShift 1s linear infinite;
+        }
+        @keyframes loader-bar-anim { from { width: 0%; } to { width: 100%; } }
+        @keyframes gradShift {
+            0%   { background-position: 0% 0%; }
+            100% { background-position: 200% 0%; }
+        }
+
+        /* ── Cursor dots (shown/hidden via style.css media) ── */
+        .cursor-dot {
+            width: 8px; height: 8px; background: #00d4aa;
+            border-radius: 50%; position: fixed; pointer-events: none; z-index: 99998;
+            transform: translate(-50%, -50%);
+            transition: transform 0.1s ease, background 0.2s ease;
+            box-shadow: 0 0 12px #00d4aa; display: none;
+        }
+        .cursor-ring {
+            width: 32px; height: 32px; border: 1.5px solid rgba(0,212,170,0.5);
+            border-radius: 50%; position: fixed; pointer-events: none; z-index: 99997;
+            transform: translate(-50%, -50%);
+            transition: all 0.15s ease; display: none;
+        }
+        .cursor-dot.clicking  { transform: translate(-50%,-50%) scale(1.8); background: #7c3aed; }
+        .cursor-ring.clicking { transform: translate(-50%,-50%) scale(0.7); border-color: #7c3aed; }
+
+        /* ── Floating Particles Canvas ─────────── */
+        #particles-canvas {
+            position: fixed; inset: 0; z-index: -2;
+            pointer-events: none;
+        }
+        /* ── Scanline overlay ──────────────────── */
+        .scanline-overlay {
+            position: fixed; inset: 0; z-index: -1; pointer-events: none;
+            background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.025) 2px,rgba(0,0,0,0.025) 4px);
+        }
+        /* ── Nav underline hover ───────────────── */
+        .nav-item-anim { position: relative; }
+        .nav-item-anim::after {
+            content: ''; position: absolute;
+            bottom: -2px; left: 50%; width: 0; height: 1.5px;
+            background: linear-gradient(90deg, #00d4aa, #7c3aed);
+            transform: translateX(-50%); transition: width 0.3s ease; border-radius: 1px;
+        }
+        .nav-item-anim:hover::after { width: 80%; }
+        /* ── Mobile nav ─────────────────────────── */
+        @media (max-width: 768px) {
+            #mobile-menu-btn { display: flex !important; }
+            .nav-links { display: none; }
+            .nav-links.open { display: flex; flex-direction: column; position: absolute; top: 62px; left: 0; right: 0; background: rgba(5,10,23,0.98); padding: 1rem; border-bottom: 1px solid rgba(0,212,170,0.2); gap: 0.5rem; z-index: 999; }
+        }
+        #mobile-menu-btn { display: none; }
+    </style>
+</head>
+
+<body data-theme-pref="{{ current_user.theme_preference if current_user else 'system' }}">
+
+<!-- ═══════════ LOADING SCREEN ═══════════ -->
+<div id="page-loader">
+    <div class="loader-logo">Study<span>Byte</span></div>
+    <div class="loader-bar"><div class="loader-bar-fill"></div></div>
+    <p style="font-size:0.7rem; color:#334155; letter-spacing:0.2em; text-transform:uppercase; font-family:'JetBrains Mono',monospace;">Initializing System...</p>
+</div>
+
+<!-- ═══════════ CUSTOM CURSOR ═══════════ -->
+<div class="cursor-dot" id="cursor-dot"></div>
+<div class="cursor-ring" id="cursor-ring"></div>
+
+<!-- ═══════════ SCANLINE OVERLAY ═══════════ -->
+<div class="scanline-overlay"></div>
+
+<!-- ═══════════ PARTICLES CANVAS ═══════════ -->
+<canvas id="particles-canvas"></canvas>
+
+<!-- ═══════════ BACKGROUND (Video Removed for Performance) ═══════════ -->
+
+<!-- ═══════════ AMBIENT GLOW ORBS ═══════════ -->
+<div style="position:fixed;pointer-events:none;z-index:-1;inset:0;overflow:hidden;">
+    <div style="position:absolute;width:600px;height:600px;border-radius:50%;background:radial-gradient(circle,rgba(0,212,170,0.06) 0%,transparent 70%);top:-200px;left:-100px;animation:orb-float1 15s ease-in-out infinite;filter:blur(40px);"></div>
+    <div style="position:absolute;width:500px;height:500px;border-radius:50%;background:radial-gradient(circle,rgba(124,58,237,0.07) 0%,transparent 70%);bottom:-150px;right:-100px;animation:orb-float2 18s ease-in-out infinite;filter:blur(40px);"></div>
+    <div style="position:absolute;width:400px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(59,130,246,0.05) 0%,transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%);animation:orb-float3 20s ease-in-out infinite;filter:blur(50px);"></div>
+</div>
+<style>
+@keyframes orb-float1 { 0%,100%{transform:translate(0,0)} 33%{transform:translate(40px,-30px)} 66%{transform:translate(-30px,20px)} }
+@keyframes orb-float2 { 0%,100%{transform:translate(0,0)} 33%{transform:translate(-50px,40px)} 66%{transform:translate(30px,-30px)} }
+@keyframes orb-float3 { 0%,100%{transform:translate(-50%,-50%) scale(1)} 50%{transform:translate(-50%,-50%) scale(1.2)} }
+</style>
+
+<!-- ═══════════ NAVBAR ═══════════ -->
+<nav class="navbar" id="main-nav">
+    <a href="{{ url_for('index') }}" class="nav-brand">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>
+        </svg>
+        Study<span>Byte</span>
+    </a>
+
+    <!-- Mobile Menu Btn -->
+    <button id="mobile-menu-btn" onclick="toggleMobileMenu()"
+        style="background:none;border:1px solid rgba(0,212,170,0.3);border-radius:0.4rem;padding:0.4rem 0.6rem;color:#00d4aa;font-size:1.1rem;align-items:center;justify-content:center;">
+        <i class="fa-solid fa-bars"></i>
+    </button>
+
+    <div class="nav-links" id="nav-links">
+        <a href="{{ url_for('index') }}" class="nav-item nav-item-anim">Home</a>
+        <a href="{{ url_for('about') }}" class="nav-item nav-item-anim">About</a>
+        <a href="{{ url_for('marketplace') }}" class="nav-item nav-item-anim" style="border-left:1px solid rgba(148,163,184,0.15);padding-left:1rem;margin-left:0.5rem;">Marketplace</a>
+        <a href="{{ url_for('tutor_search') }}" class="nav-item nav-item-anim">Find Tutors</a>
+
+        {% if session.user_id %}
+            {% if session.role in ['learner', 'tutor'] %}
+            <a href="{{ url_for('dashboard') }}" class="nav-item nav-item-anim">Dashboard</a>
+            {% endif %}
+            {% if session.role == 'admin' %}
+            <a href="{{ url_for('admin_dashboard') }}" class="nav-item nav-item-anim" style="color:#7c3aed;">&#9679; Admin</a>
+            {% endif %}
+
+            {% if current_user.role != 'admin' %}
+            <a href="{{ url_for('wallet') }}" class="wallet-badge" title="1 Token = 0.50 BDT">
+                🪙 {{ wallet.balance if wallet else 0 }} T &nbsp;<span style="opacity:0.7;font-size:0.75em;">({{ (wallet.balance * 0.50)|round(2) if wallet else 0 }} BDT)</span>
+            </a>
+
+            <form action="{{ url_for('switch_role', role='tutor' if session.role == 'learner' else 'learner') }}" style="display:inline;">
+                <button type="submit" class="btn btn-outline btn-sm">
+                    <i class="fa-solid fa-repeat" style="font-size:0.7rem;"></i>
+                    {{ 'Tutor Mode' if session.role == 'learner' else 'Learner Mode' }}
+                </button>
+            </form>
+            {% endif %}
+
+            <select id="theme-selector" class="form-control" style="width:auto;padding:0.3rem 2rem 0.3rem 0.6rem;font-size:0.75rem;border-radius:9999px;" onchange="updateTheme(this.value)">
+                <option value="system"  {% if current_user.theme_preference == 'system' %}selected{% endif %}>🖥 System</option>
+                <option value="light"   {% if current_user.theme_preference == 'light'  %}selected{% endif %}>☀️ Light</option>
+                <option value="dark"    {% if current_user.theme_preference == 'dark'   %}selected{% endif %}>🌙 Dark</option>
+            </select>
+
+            <a href="{{ url_for('profile') }}" class="nav-item nav-item-anim">
+                <i class="fa-solid fa-circle-user" style="opacity:0.7;"></i> Profile
+            </a>
+
+            <!-- Notification Bell -->
+            {% if unread_notifications %}
+            <button onclick="toggleNotifDrawer()" class="notif-bell" title="Notifications" style="position:relative;background:none;border:none;color:var(--text-muted);font-size:1rem;padding:0.3rem 0.5rem;border-radius:0.5rem;cursor:pointer;transition:color 0.2s;">
+                <i class="fa-solid fa-bell" style="animation:float 2s ease-in-out infinite;"></i>
+                <span style="position:absolute;top:-2px;right:-2px;width:16px;height:16px;border-radius:50%;background:#ef4444;color:white;font-size:0.55rem;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid #050a17;">{{ unread_notifications|length }}</span>
+            </button>
+            {% endif %}
+
+            <a href="{{ url_for('logout') }}" class="btn btn-outline btn-sm" style="border-color:rgba(239,68,68,0.4);color:#f87171;">
+                <i class="fa-solid fa-arrow-right-from-bracket" style="font-size:0.75rem;"></i> Logout
+            </a>
+        {% else %}
+            <a href="{{ url_for('login') }}" class="nav-item nav-item-anim">Login</a>
+            <a href="{{ url_for('register') }}" class="btn btn-primary">
+                <i class="fa-solid fa-bolt" style="font-size:0.75rem;"></i> Get Started
+            </a>
+        {% endif %}
+    </div>
+</nav>
+
+<!-- ═══════════ MAIN CONTENT ═══════════ -->
+<div class="container">
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-messages">
+            {% for category, message in messages %}
+            <div class="alert alert-{{ category }}">
+                <i class="fa-solid {% if category == 'success' %}fa-circle-check{% else %}fa-circle-exclamation{% endif %}" style="font-size:0.9rem;opacity:0.8;"></i>
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Notification Drawer (triggered by 🔔 bell in navbar) -->
+    {% if unread_notifications %}
+    <div id="notif-drawer" style="display:none;position:fixed;top:66px;right:20px;width:340px;max-width:calc(100vw - 32px);z-index:8888;border-radius:1.1rem;overflow:hidden;
+        background:linear-gradient(145deg,rgba(5,10,23,0.97),rgba(10,18,40,0.95));
+        border:1px solid rgba(0,212,170,0.25);
+        box-shadow:0 25px 60px rgba(0,0,0,0.7),0 0 20px rgba(0,212,170,0.08);
+        backdrop-filter:blur(40px);">
+        <!-- Drawer Header -->
+        <div style="background:linear-gradient(135deg,rgba(0,212,170,0.1),rgba(124,58,237,0.1));padding:12px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(0,212,170,0.12);">
+            <span style="font-weight:700;font-size:0.85rem;color:#f8fafc;display:flex;align-items:center;gap:8px;">
+                <i class="fa-solid fa-bell" style="color:#00d4aa;"></i> Notifications
+                <span style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:#f87171;font-size:0.63rem;padding:1px 7px;border-radius:9999px;font-weight:700;">
+                    {{ unread_notifications|length }} new
+                </span>
+            </span>
+            <div style="display:flex;gap:6px;align-items:center;">
+                <button onclick="dismissNotifications()"
+                    style="font-size:0.68rem;padding:3px 10px;background:rgba(0,212,170,0.08);border:1px solid rgba(0,212,170,0.2);color:#00d4aa;border-radius:9999px;cursor:pointer;font-weight:600;">
+                    Clear All
+                </button>
+                <button onclick="toggleNotifDrawer()"
+                    style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:0.85rem;display:flex;align-items:center;justify-content:center;">✕</button>
+            </div>
+        </div>
+        <!-- Drawer Items -->
+        <div style="max-height:340px;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:6px;">
+            {% for n in unread_notifications %}
+            <div style="padding:10px 12px;border-radius:0.75rem;background:rgba(0,212,170,0.04);border:1px solid rgba(0,212,170,0.1);"
+                onmouseover="this.style.background='rgba(0,212,170,0.09)'" onmouseout="this.style.background='rgba(0,212,170,0.04)'">
+                <div style="font-size:0.8rem;color:#e2e8f0;line-height:1.5;">{{ n.message }}</div>
+                {% if n.action_url %}
+                <a href="{{ n.action_url }}" style="display:inline-block;margin-top:5px;font-size:0.72rem;color:#f59e0b;font-weight:600;text-decoration:none;">
+                    → Take Action
+                </a>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        <div style="padding:8px 12px;border-top:1px solid rgba(0,212,170,0.06);text-align:center;">
+            <span style="font-size:0.65rem;color:#334155;letter-spacing:0.06em;">Powered by StudyByte Alerts</span>
+        </div>
+    </div>
+    <script>
+    let _notifOpen = false;
+    function toggleNotifDrawer() {
+        const d = document.getElementById('notif-drawer');
+        if (!d) return;
+        _notifOpen = !_notifOpen;
+        if (_notifOpen) {
+            d.style.display = 'block';
+            d.style.animation = 'none'; d.offsetHeight;
+            d.style.animation = 'chat-slide-up 0.3s cubic-bezier(0.4,0,0.2,1) forwards';
+        } else {
+            d.style.display = 'none';
+        }
+    }
+    function dismissNotifications() {
+        fetch('{{ url_for("read_notifications") }}', {method:'POST'})
+        .then(() => {
+            const d = document.getElementById('notif-drawer');
+            const bells = document.querySelectorAll('.notif-bell');
+            if (d) d.style.display = 'none';
+            bells.forEach(b => b.style.display = 'none');
+            _notifOpen = false;
         });
+    }
+    document.addEventListener('click', function(e) {
+        const d = document.getElementById('notif-drawer');
+        const bells = document.querySelectorAll('.notif-bell');
+        let insideBell = false;
+        bells.forEach(b => { if (b.contains(e.target)) insideBell = true; });
+        if (d && _notifOpen && !d.contains(e.target) && !insideBell) {
+            d.style.display = 'none'; _notifOpen = false;
+        }
+    });
     </script>
-    
-    <!-- Footer -->
-    <footer style="text-align: center; padding: 1.5rem; margin-top: 3rem; border-top: 1px solid var(--border); background-color: var(--bg-surface);">
-        <p class="text-sm text-muted mb-1">&copy; {{ config.get('CURRENT_YEAR', '2026') }} StudyByte. All Rights Reserved.</p>
-        <p class="text-xs text-teal">Developed & Designed by <strong>Belal Hossain</strong></p>
-    </footer>
+    {% endif %}
+
+
+    {% block content %}{% endblock %}
+</div>
+
+<!-- ═══════════ FOOTER ═══════════ -->
+<footer>
+    <p style="font-size:0.82rem;color:#475569;margin-bottom:0.25rem;">
+        &copy; {{ config.get('CURRENT_YEAR','2026') }} <span style="color:#00d4aa;font-weight:600;">StudyByte</span>. All Rights Reserved.
+    </p>
+    <p style="font-size:0.75rem;color:#334155;">
+        Developed &amp; Designed with <span style="color:#ff2d9f;">♥</span> by <strong style="color:#7c3aed;">Belal Hossain</strong>
+    </p>
+</footer>
+
+<!-- ═══════════ PREMIUM CHATBOT ═══════════ -->
+<style>
+/* Chatbot Widget Styles */
+#sb-chatbot-widget { position:fixed; bottom:28px; right:28px; z-index:9999; font-family:'Inter',sans-serif; }
+
+/* Toggle Pulse Ring */
+.chat-toggle-pulse {
+    position:absolute; inset:-6px; border-radius:50%;
+    border:2px solid rgba(0,212,170,0.5);
+    animation:chat-pulse-ring 2s ease-out infinite;
+    pointer-events:none;
+}
+@keyframes chat-pulse-ring {
+    0%   { transform:scale(1); opacity:0.7; }
+    100% { transform:scale(1.5); opacity:0; }
+}
+
+/* Chat Window Slide Up */
+@keyframes chat-slide-up {
+    from { opacity:0; transform:translateY(20px) scale(0.95); }
+    to   { opacity:1; transform:translateY(0) scale(1); }
+}
+
+/* Message Appear */
+@keyframes msg-pop {
+    from { opacity:0; transform:translateY(8px) scale(0.95); }
+    to   { opacity:1; transform:translateY(0) scale(1); }
+}
+
+/* Typing dots */
+.typing-dot {
+    width:7px; height:7px; border-radius:50%;
+    background:#00d4aa; display:inline-block;
+    animation:typing-bounce 1.2s ease-in-out infinite;
+}
+.typing-dot:nth-child(2) { animation-delay:0.2s; }
+.typing-dot:nth-child(3) { animation-delay:0.4s; }
+@keyframes typing-bounce {
+    0%,80%,100% { transform:scale(0.6); opacity:0.4; }
+    40% { transform:scale(1); opacity:1; }
+}
+
+/* Chip buttons */
+.chat-chip {
+    display:inline-block; padding:5px 12px; border-radius:9999px;
+    border:1px solid rgba(0,212,170,0.4); color:#00d4aa;
+    font-size:0.72rem; cursor:pointer; background:rgba(0,212,170,0.06);
+    transition:all 0.2s ease; margin:3px 2px; white-space:nowrap;
+}
+.chat-chip:hover { background:rgba(0,212,170,0.15); border-color:#00d4aa; transform:translateY(-1px); }
+
+/* Scrollbar inside chat */
+#sb-chat-messages::-webkit-scrollbar { width:3px; }
+#sb-chat-messages::-webkit-scrollbar-thumb { background:rgba(0,212,170,0.3); border-radius:2px; }
+
+/* Header glow line */
+.chat-header-glow {
+    height:2px;
+    background:linear-gradient(90deg,transparent,#00d4aa,#7c3aed,transparent);
+    animation:gradShift 3s linear infinite;
+    background-size:300%;
+}
+</style>
+
+<div id="sb-chatbot-widget">
+    <!-- Chat Window -->
+    <div id="sb-chatbot-window" style="display:none;width:360px;border-radius:1.5rem;flex-direction:column;margin-bottom:14px;overflow:hidden;
+        background:linear-gradient(145deg,rgba(5,10,23,0.97),rgba(10,18,40,0.95));
+        border:1px solid rgba(0,212,170,0.25);
+        box-shadow:0 30px 80px rgba(0,0,0,0.8),0 0 0 1px rgba(0,212,170,0.08),inset 0 1px 0 rgba(255,255,255,0.04);
+        backdrop-filter:blur(40px) saturate(180%);
+        animation:chat-slide-up 0.35s cubic-bezier(0.4,0,0.2,1) forwards;">
+
+        <!-- Header -->
+        <div style="background:linear-gradient(135deg,rgba(0,212,170,0.12),rgba(124,58,237,0.12));padding:16px 18px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(0,212,170,0.12);">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#00d4aa,#7c3aed);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 15px rgba(0,212,170,0.4);font-size:1.1rem;">🤖</div>
+                <div>
+                    <div style="color:#f8fafc;font-weight:700;font-size:0.88rem;letter-spacing:0.02em;">StudyByte AI</div>
+                    <div style="display:flex;align-items:center;gap:5px;margin-top:2px;">
+                        <span style="width:6px;height:6px;border-radius:50%;background:#00ff88;box-shadow:0 0 6px #00ff88;animation:chat-pulse-ring 2s ease-out infinite;"></span>
+                        <span style="color:#64748b;font-size:0.68rem;letter-spacing:0.05em;">ONLINE</span>
+                    </div>
+                </div>
+            </div>
+            <button onclick="toggleChatbot()" title="Close"
+                style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s ease;line-height:1;"
+                onmouseover="this.style.background='rgba(239,68,68,0.15)';this.style.color='#f87171';"
+                onmouseout="this.style.background='rgba(255,255,255,0.06)';this.style.color='#94a3b8';">✕</button>
+        </div>
+        <div class="chat-header-glow"></div>
+
+        <!-- Messages Area -->
+        <div id="sb-chat-messages" style="flex-grow:1;padding:16px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;min-height:220px;max-height:300px;">
+            <!-- Welcome Message -->
+            <div style="display:flex;gap:8px;align-items:flex-start;animation:msg-pop 0.3s ease forwards;">
+                <div style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#00d4aa,#7c3aed);display:flex;align-items:center;justify-content:center;font-size:0.7rem;flex-shrink:0;margin-top:2px;">🤖</div>
+                <div style="background:rgba(0,212,170,0.08);border:1px solid rgba(0,212,170,0.15);color:#e2e8f0;padding:10px 14px;border-radius:14px;border-bottom-left-radius:4px;max-width:85%;font-size:0.82rem;line-height:1.5;">
+                    Hey there! 👋 I'm Byte, your StudyByte assistant.<br><span style="color:#94a3b8;font-size:0.75rem;">What can I help you with?</span>
+                </div>
+            </div>
+            <!-- Quick Reply Chips -->
+            <div id="sb-chips" style="display:flex;flex-wrap:wrap;padding:0 0 4px;">
+                <button class="chat-chip" onclick="quickAsk('How do tokens work?')">💰 Tokens</button>
+                <button class="chat-chip" onclick="quickAsk('How to book a session?')">📅 Booking</button>
+                <button class="chat-chip" onclick="quickAsk('Find a tutor')">🎓 Tutors</button>
+                <button class="chat-chip" onclick="quickAsk('I need support')">🛟 Support</button>
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div style="padding:12px 14px;border-top:1px solid rgba(0,212,170,0.1);display:flex;gap:8px;align-items:center;background:rgba(0,0,0,0.2);">
+            <input type="text" id="sb-chat-input" placeholder="Ask Byte anything..." autocomplete="off"
+                style="flex-grow:1;padding:9px 14px;border:1px solid rgba(0,212,170,0.2);border-radius:9999px;
+                    background:rgba(0,212,170,0.04);color:#e2e8f0;outline:none;font-size:0.82rem;font-family:inherit;
+                    transition:border-color 0.2s ease;"
+                onfocus="this.style.borderColor='rgba(0,212,170,0.5)';this.style.background='rgba(0,212,170,0.06)';"
+                onblur="this.style.borderColor='rgba(0,212,170,0.2)';this.style.background='rgba(0,212,170,0.04)';"
+                onkeydown="if(event.key==='Enter'){sendChatMessage();event.preventDefault();}">
+            <button onclick="sendChatMessage()" title="Send"
+                style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#00d4aa,#7c3aed);border:none;
+                    display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;
+                    box-shadow:0 4px 15px rgba(0,212,170,0.35);transition:all 0.2s ease;"
+                onmouseover="this.style.transform='scale(1.1)';this.style.boxShadow='0 6px 20px rgba(0,212,170,0.5)';"
+                onmouseout="this.style.transform='scale(1)';this.style.boxShadow='0 4px 15px rgba(0,212,170,0.35)';">
+                <i class="fa-solid fa-paper-plane" style="color:#050a17;font-size:0.75rem;margin-left:1px;"></i>
+            </button>
+        </div>
+        <!-- Footer brand -->
+        <div style="text-align:center;padding:6px;border-top:1px solid rgba(255,255,255,0.03);">
+            <span style="font-size:0.6rem;color:#334155;letter-spacing:0.08em;">POWERED BY</span>
+            <span style="font-size:0.6rem;color:#00d4aa;font-weight:700;letter-spacing:0.06em;"> STUDYBYTE AI</span>
+        </div>
+    </div>
+
+    <!-- Floating Toggle Button -->
+    <div style="position:relative;float:right;width:60px;height:60px;">
+        <div class="chat-toggle-pulse"></div>
+        <button id="sb-chatbot-toggle" onclick="toggleChatbot()" title="Chat with Byte"
+            style="width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg,#00d4aa,#7c3aed);
+                border:2px solid rgba(255,255,255,0.15);font-size:1.4rem;cursor:pointer;
+                box-shadow:0 8px 32px rgba(0,212,170,0.45),0 0 0 0 rgba(0,212,170,0.4);
+                display:flex;align-items:center;justify-content:center;transition:all 0.3s cubic-bezier(0.4,0,0.2,1);
+                position:relative;z-index:1;">
+            <i class="fa-solid fa-robot" style="color:#050a17;"></i>
+        </button>
+    </div>
+</div>
+
+
+<!-- ═══════════ SCRIPTS ═══════════ -->
+<script>
+// ── Loading Screen ─────────────────────────────
+window.addEventListener('load', () => {
+    setTimeout(() => {
+        document.getElementById('page-loader').classList.add('hidden');
+    }, 900);
+});
+
+// ── Custom Cursor ──────────────────────────────
+const dot  = document.getElementById('cursor-dot');
+const ring = document.getElementById('cursor-ring');
+let mouseX = 0, mouseY = 0, ringX = 0, ringY = 0;
+
+document.addEventListener('mousemove', e => {
+    mouseX = e.clientX; mouseY = e.clientY;
+    dot.style.left = mouseX + 'px'; dot.style.top = mouseY + 'px';
+});
+
+function animateRing() {
+    ringX += (mouseX - ringX) * 0.15;
+    ringY += (mouseY - ringY) * 0.15;
+    ring.style.left = ringX + 'px'; ring.style.top = ringY + 'px';
+    requestAnimationFrame(animateRing);
+}
+animateRing();
+
+document.addEventListener('mousedown', () => { dot.classList.add('clicking'); ring.classList.add('clicking'); });
+document.addEventListener('mouseup',   () => { dot.classList.remove('clicking'); ring.classList.remove('clicking'); });
+
+// Hover effects on interactive elements
+document.querySelectorAll('a,button,input,select,textarea').forEach(el => {
+    el.addEventListener('mouseenter', () => { ring.style.transform = 'translate(-50%,-50%) scale(1.5)'; ring.style.borderColor = 'rgba(124,58,237,0.7)'; });
+    el.addEventListener('mouseleave', () => { ring.style.transform = 'translate(-50%,-50%) scale(1)';   ring.style.borderColor = 'rgba(0,212,170,0.5)'; });
+});
+
+// ── Floating Particles ─────────────────────────
+const canvas = document.getElementById('particles-canvas');
+const ctx    = canvas.getContext('2d');
+let particles = [];
+const PARTICLE_COUNT = 60;
+
+function resizeCanvas() {
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+function createParticle() {
+    return {
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: -Math.random() * 0.5 - 0.1,
+        radius: Math.random() * 1.5 + 0.3,
+        alpha: Math.random() * 0.4 + 0.1,
+        color: Math.random() > 0.6 ? '#00d4aa' : Math.random() > 0.5 ? '#7c3aed' : '#3b82f6',
+        life: 0,
+        maxLife: Math.random() * 300 + 200,
+    };
+}
+
+for (let i = 0; i < PARTICLE_COUNT; i++) {
+    particles.push({ ...createParticle(), life: Math.random() * 300 });
+}
+
+// Draw lines between nearby particles
+function drawConnections() {
+    for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+            const dx = particles[i].x - particles[j].x;
+            const dy = particles[i].y - particles[j].y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist < 120) {
+                ctx.beginPath();
+                ctx.strokeStyle = `rgba(0,212,170,${0.06 * (1 - dist/120)})`;
+                ctx.lineWidth = 0.5;
+                ctx.moveTo(particles[i].x, particles[i].y);
+                ctx.lineTo(particles[j].x, particles[j].y);
+                ctx.stroke();
+            }
+        }
+    }
+}
+
+function animateParticles() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawConnections();
+    particles.forEach((p, idx) => {
+        p.x += p.vx; p.y += p.vy; p.life++;
+        const progress = p.life / p.maxLife;
+        const alpha = p.alpha * (progress < 0.2 ? progress/0.2 : progress > 0.8 ? (1-progress)/0.2 : 1);
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fillStyle = p.color.replace(')', `,${alpha})`).replace('rgb(', 'rgba(').replace('#00d4aa', `rgba(0,212,170,${alpha})`).replace('#7c3aed', `rgba(124,58,237,${alpha})`).replace('#3b82f6', `rgba(59,130,246,${alpha})`);
+        ctx.shadowBlur = 6;
+        ctx.shadowColor = p.color;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        if (p.life >= p.maxLife || p.y < -10 || p.x < -10 || p.x > canvas.width + 10) {
+            particles[idx] = { ...createParticle() };
+        }
+    });
+    requestAnimationFrame(animateParticles);
+}
+animateParticles();
+
+// ── Navbar scroll effect ───────────────────────
+const nav = document.getElementById('main-nav');
+window.addEventListener('scroll', () => {
+    if (window.scrollY > 20) {
+        nav.style.background = 'rgba(5,10,23,0.97)';
+        nav.style.boxShadow  = '0 4px 30px rgba(0,0,0,0.5)';
+    } else {
+        nav.style.background = '';
+        nav.style.boxShadow  = '';
+    }
+});
+
+// ── Ripple Button Effect ───────────────────────
+document.querySelectorAll('.btn').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+        const r = document.createElement('span');
+        r.className = 'ripple';
+        const rect = this.getBoundingClientRect();
+        r.style.left = (e.clientX - rect.left) + 'px';
+        r.style.top  = (e.clientY - rect.top)  + 'px';
+        this.appendChild(r);
+        setTimeout(() => r.remove(), 700);
+    });
+});
+
+// ── Animate In on Scroll ──────────────────────
+const animObserver = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+        if (e.isIntersecting) {
+            e.target.style.animation = 'fadeInUp 0.6s ease-out forwards';
+            animObserver.unobserve(e.target);
+        }
+    });
+}, { threshold: 0.1 });
+
+document.querySelectorAll('.card').forEach(c => {
+    c.style.opacity = '0';
+    animObserver.observe(c);
+});
+
+// ── 3D Card Tilt ──────────────────────────────
+document.querySelectorAll('.card').forEach(card => {
+    card.addEventListener('mousemove', e => {
+        const rect = card.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / rect.width  - 0.5;
+        const y = (e.clientY - rect.top)  / rect.height - 0.5;
+        card.style.transform = `perspective(600px) rotateX(${-y * 6}deg) rotateY(${x * 6}deg) translateY(-4px) scale(1.01)`;
+    });
+    card.addEventListener('mouseleave', () => {
+        card.style.transform = '';
+        card.style.transition = 'transform 0.5s ease';
+    });
+});
+
+// ── Mobile Nav ────────────────────────────────
+function toggleMobileMenu() {
+    const nl = document.getElementById('nav-links');
+    nl.classList.toggle('open');
+}
+
+// ── Theme Handler ─────────────────────────────
+function updateTheme(theme) {
+    let apply = theme;
+    if (theme === 'system') apply = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', apply);
+    {% if session.user_id %}
+    fetch('{{ url_for("set_theme") }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({theme})
+    });
+    {% endif %}
+}
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+    if (document.body.getAttribute('data-theme-pref') === 'system')
+        document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+});
+
+// ── Chatbot ───────────────────────────────────────────────────────
+let chatOpen = false;
+function toggleChatbot() {
+    const win = document.getElementById('sb-chatbot-window');
+    const btn = document.getElementById('sb-chatbot-toggle');
+    chatOpen = !chatOpen;
+    if (chatOpen) {
+        win.style.display = 'flex';
+        win.style.flexDirection = 'column';
+        // Re-trigger slide animation
+        win.style.animation = 'none';
+        win.offsetHeight; // reflow
+        win.style.animation = 'chat-slide-up 0.35s cubic-bezier(0.4,0,0.2,1) forwards';
+        setTimeout(() => document.getElementById('sb-chat-input').focus(), 200);
+        btn.style.transform = 'rotate(12deg) scale(1.05)';
+    } else {
+        win.style.display = 'none';
+        btn.style.transform = 'rotate(0) scale(1)';
+    }
+}
+
+function appendMsg(text, isSelf) {
+    const messages = document.getElementById('sb-chat-messages');
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'display:flex;gap:8px;align-items:flex-start;animation:msg-pop 0.3s ease forwards;' + (isSelf ? 'flex-direction:row-reverse;' : '');
+
+    if (!isSelf) {
+        const avatar = document.createElement('div');
+        avatar.style.cssText = 'width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#00d4aa,#7c3aed);display:flex;align-items:center;justify-content:center;font-size:0.7rem;flex-shrink:0;margin-top:2px;';
+        avatar.textContent = '🤖';
+        wrapper.appendChild(avatar);
+    }
+
+    const bubble = document.createElement('div');
+    bubble.style.cssText = isSelf
+        ? 'background:linear-gradient(135deg,rgba(0,212,170,0.18),rgba(124,58,237,0.18));border:1px solid rgba(0,212,170,0.3);color:#f1f5f9;padding:10px 14px;border-radius:14px;border-bottom-right-radius:4px;max-width:82%;font-size:0.82rem;line-height:1.5;word-break:break-word;'
+        : 'background:rgba(0,212,170,0.07);border:1px solid rgba(0,212,170,0.15);color:#e2e8f0;padding:10px 14px;border-radius:14px;border-bottom-left-radius:4px;max-width:82%;font-size:0.82rem;line-height:1.5;word-break:break-word;';
+    bubble.textContent = text;
+    wrapper.appendChild(bubble);
+    messages.appendChild(wrapper);
+    messages.scrollTop = messages.scrollHeight;
+    return bubble;
+}
+
+function showTyping() {
+    const messages = document.getElementById('sb-chat-messages');
+    const wrapper = document.createElement('div');
+    wrapper.id = 'typing-indicator';
+    wrapper.style.cssText = 'display:flex;gap:8px;align-items:center;animation:msg-pop 0.3s ease forwards;';
+    wrapper.innerHTML = `
+        <div style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#00d4aa,#7c3aed);display:flex;align-items:center;justify-content:center;font-size:0.7rem;flex-shrink:0;">🤖</div>
+        <div style="background:rgba(0,212,170,0.07);border:1px solid rgba(0,212,170,0.15);padding:10px 16px;border-radius:14px;border-bottom-left-radius:4px;display:flex;gap:4px;align-items:center;">
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+        </div>`;
+    messages.appendChild(wrapper);
+    messages.scrollTop = messages.scrollHeight;
+}
+
+function hideTyping() {
+    const t = document.getElementById('typing-indicator');
+    if (t) t.remove();
+}
+
+function getResponse(lower) {
+    if (/hi|hello|hey/.test(lower))          return "Hey there! 👋 Ready to learn something new today?";
+    if (/tutor/.test(lower))                 return "🎓 Find verified tutors in 'Find Tutors' or browse the Marketplace for topic-specific sessions!";
+    if (/token|money|bdt/.test(lower))       return "💰 1 Token = 0.50 BDT. You can recharge from your Wallet page anytime!";
+    if (/book|session/.test(lower))          return "📅 Go to Marketplace → pick a tutor → choose an available slot. Easy!";
+    if (/dispute|problem|issue/.test(lower)) return "⚠️ Open a dispute from your dashboard. Our admins review every case within 24 hours.";
+    if (/thank/.test(lower))                 return "You're welcome! 🌟 Happy learning at StudyByte!";
+    if (/course|learn/.test(lower))          return "📚 All courses are in the Marketplace. Filter by subject, rating, or price!";
+    if (/support/.test(lower))               return "🛟 Use 'Get Support' from your dashboard to open a ticket!";
+    if (/withdraw|wallet/.test(lower))       return "💳 Go to Wallet → Request Withdrawal. Min 50 BDT. Processed within 24-48 hours.";
+    if (/register|sign.?up/.test(lower))    return "✍️ Click 'Get Started' in the top nav or use Google Sign-In for EWU students!";
+    return "I'm Byte, StudyByte's AI guide! 🤖 Try asking about tutors, tokens, booking, or support.";
+}
+
+function sendChatMessage() {
+    const input = document.getElementById('sb-chat-input');
+    const text  = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    // Hide chips after first message
+    const chips = document.getElementById('sb-chips');
+    if (chips) chips.style.display = 'none';
+    appendMsg(text, true);
+    showTyping();
+    setTimeout(() => {
+        hideTyping();
+        appendMsg(getResponse(text.toLowerCase()), false);
+    }, 800);
+}
+
+function quickAsk(text) {
+    const chips = document.getElementById('sb-chips');
+    if (chips) chips.style.display = 'none';
+    appendMsg(text, true);
+    showTyping();
+    setTimeout(() => {
+        hideTyping();
+        appendMsg(getResponse(text.toLowerCase()), false);
+    }, 700);
+}
+
+</script>
 </body>
 </html>

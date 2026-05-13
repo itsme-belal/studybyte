@@ -1,0 +1,389 @@
+{% extends "base.html" %}
+{% block title %}Dispute Resolution — Admin{% endblock %}
+
+{% block content %}
+<style>
+/* ── Dispute Page ── */
+.disputes-header {
+    display:flex;justify-content:space-between;align-items:center;
+    margin-bottom:1.5rem;flex-wrap:wrap;gap:0.75rem;
+}
+.stat-grid {
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
+    gap:0.85rem;margin-bottom:1.75rem;
+}
+.stat-card {
+    padding:1rem 1.25rem;border-radius:0.9rem;text-align:center;
+    background:rgba(10,18,40,0.7);border:1px solid rgba(148,163,184,0.1);
+}
+
+/* Dispute Card */
+.d-card {
+    background:linear-gradient(145deg,rgba(10,18,40,0.85),rgba(5,10,23,0.95));
+    border:1px solid rgba(148,163,184,0.1);
+    border-radius:1.1rem;overflow:hidden;margin-bottom:1.25rem;
+    transition:border-color 0.3s;
+}
+.d-card:hover { border-color:rgba(239,68,68,0.25); }
+.d-card-header {
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0.85rem 1.25rem;
+    border-bottom:1px solid rgba(148,163,184,0.07);
+    background:rgba(0,0,0,0.2);flex-wrap:wrap;gap:0.5rem;
+}
+.d-card-body {
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    gap:0;
+}
+@media(max-width:900px) { .d-card-body { grid-template-columns:1fr; } }
+
+.d-panel {
+    padding:1rem 1.25rem;
+    border-right:1px solid rgba(148,163,184,0.07);
+}
+.d-panel:last-child { border-right:none; }
+.d-panel-title {
+    font-size:0.6rem;font-weight:700;letter-spacing:0.12em;
+    text-transform:uppercase;color:#334155;margin-bottom:0.75rem;
+    display:flex;align-items:center;gap:5px;
+}
+
+/* Join-status row */
+.join-row {
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0.5rem 0.65rem;border-radius:0.6rem;
+    background:rgba(0,0,0,0.2);margin-bottom:0.4rem;
+}
+.join-badge {
+    font-size:0.65rem;font-weight:700;padding:2px 8px;
+    border-radius:9999px;letter-spacing:0.04em;
+}
+.join-yes { background:rgba(0,212,170,0.12);color:#00d4aa;border:1px solid rgba(0,212,170,0.25); }
+.join-no  { background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.25); }
+
+/* Reporter message */
+.reporter-msg {
+    background:rgba(245,158,11,0.05);border:1px solid rgba(245,158,11,0.15);
+    border-left:3px solid #f59e0b;border-radius:0.6rem;
+    padding:0.65rem 0.85rem;font-size:0.78rem;color:#cbd5e1;
+    line-height:1.6;font-style:italic;word-break:break-word;
+}
+
+/* Action form */
+.action-select {
+    width:100%;padding:0.4rem 0.6rem;font-size:0.78rem;border-radius:0.5rem;
+    background:rgba(5,10,23,0.9)!important;color:#e2e8f0!important;
+    border:1px solid rgba(148,163,184,0.2)!important;margin-bottom:0.4rem;
+}
+.notes-input {
+    width:100%;padding:0.4rem 0.6rem;font-size:0.75rem;border-radius:0.5rem;
+    background:rgba(5,10,23,0.9)!important;color:#e2e8f0!important;
+    border:1px solid rgba(148,163,184,0.12)!important;margin-bottom:0.5rem;
+    font-family:inherit;resize:vertical;
+}
+</style>
+
+<div class="disputes-header">
+    <div>
+        <h2 style="font-size:1.3rem;font-weight:800;color:var(--text-heading);margin-bottom:4px;">
+            ⚖️ Dispute Resolution Center
+        </h2>
+        <p style="font-size:0.78rem;color:#64748b;">
+            Review session evidence, join logs, and reporter messages before making a judgment.
+        </p>
+    </div>
+    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline" style="font-size:0.8rem;">← Admin</a>
+</div>
+
+<!-- Summary stats -->
+{% if sf %}
+<div class="stat-grid">
+    <div class="stat-card">
+        <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:6px;">Open Disputes</div>
+        <div style="font-size:1.6rem;font-weight:800;color:#f87171;">{{ disputes | selectattr('status','equalto','Open') | list | length }}</div>
+    </div>
+    <div class="stat-card">
+        <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:6px;">System Profit</div>
+        <div style="font-size:1.4rem;font-weight:800;color:#00d4aa;">{{ "%.1f"|format(sf.net_profit) }} 🪙</div>
+    </div>
+    <div class="stat-card">
+        <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:6px;">Total Revenue</div>
+        <div style="font-size:1.4rem;font-weight:800;color:#7c3aed;">{{ "%.1f"|format(sf.total_revenue) }} 🪙</div>
+    </div>
+    <div class="stat-card">
+        <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:6px;">Total Expenses</div>
+        <div style="font-size:1.4rem;font-weight:800;color:#f59e0b;">{{ "%.1f"|format(sf.total_expenses) }} 🪙</div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Dispute Cards -->
+{% if disputes %}
+{% for d in disputes %}
+{% set bk = d.booking %}
+{% set slot = bk.slot %}
+{% set esc = bk.escrow_transactions | selectattr('status','equalto','Held') | first %}
+{% set tutor = bk.listing.tutor %}
+{% set learner = bk.learner %}
+
+<div class="d-card">
+
+    <!-- Card Header -->
+    <div class="d-card-header">
+        <div style="display:flex;align-items:center;gap:12px;">
+            <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,rgba(239,68,68,0.2),rgba(245,158,11,0.2));
+                border:1px solid rgba(239,68,68,0.3);display:flex;align-items:center;justify-content:center;font-size:1rem;">⚖️</div>
+            <div>
+                <div style="font-size:0.9rem;font-weight:800;color:#f1f5f9;">
+                    BKG-{{ bk.id }} &nbsp;·&nbsp;
+                    <span style="color:#94a3b8;font-weight:500;font-size:0.82rem;">{{ bk.listing.title }}</span>
+                </div>
+                <div style="font-size:0.65rem;color:#475569;margin-top:2px;">
+                    Dispute #{{ d.id }} &nbsp;·&nbsp; Reported {{ d.timestamp.strftime('%d %b %Y at %H:%M') }} UTC
+                </div>
+            </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <!-- Category -->
+            <span style="font-size:0.7rem;font-weight:700;padding:3px 10px;border-radius:9999px;
+                background:rgba(245,158,11,0.1);color:#f59e0b;border:1px solid rgba(245,158,11,0.25);">
+                {{ d.category }}
+            </span>
+            <!-- Status -->
+            <span style="font-size:0.7rem;font-weight:700;padding:3px 10px;border-radius:9999px;
+                {% if d.status == 'Open' %}background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.25);
+                {% else %}background:rgba(0,212,170,0.1);color:#00d4aa;border:1px solid rgba(0,212,170,0.25);{% endif %}">
+                {% if d.status == 'Open' %}🔴 OPEN{% else %}✅ {{ d.status }}{% endif %}
+            </span>
+            {% if esc %}
+            <span style="font-size:0.72rem;font-weight:800;padding:3px 10px;border-radius:9999px;
+                background:rgba(124,58,237,0.12);color:#a78bfa;border:1px solid rgba(124,58,237,0.25);">
+                {{ esc.amount }} 🪙 in escrow
+            </span>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 3-Panel Body -->
+    <div class="d-card-body">
+
+        <!-- PANEL 1: Session Intelligence -->
+        <div class="d-panel">
+            <div class="d-panel-title">📡 Session Intelligence</div>
+
+            <!-- Scheduled Slot -->
+            <div style="background:rgba(0,0,0,0.3);border-radius:0.6rem;padding:0.6rem 0.8rem;margin-bottom:0.75rem;">
+                <div style="font-size:0.6rem;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Scheduled Slot</div>
+                {% if slot %}
+                <div style="font-size:0.8rem;font-weight:700;color:#e2e8f0;">
+                    📅 {{ slot.date }}
+                </div>
+                <div style="font-size:0.75rem;color:#94a3b8;margin-top:2px;">
+                    🕐 {{ slot.start_time }} → {{ slot.end_time }}
+                </div>
+                {% else %}
+                <div style="font-size:0.75rem;color:#64748b;">No slot data</div>
+                {% endif %}
+            </div>
+
+            <!-- Tutor Join Status -->
+            <div class="join-row">
+                <div>
+                    <div style="font-size:0.72rem;font-weight:600;color:#e2e8f0;">
+                        🎓 {{ tutor.name if tutor else 'Tutor' }}
+                        <span style="font-size:0.62rem;color:#475569;font-weight:400;">(Tutor)</span>
+                    </div>
+                    {% if bk.tutor_join_time %}
+                    <div style="font-size:0.62rem;color:#64748b;margin-top:1px;">
+                        Joined at {{ bk.tutor_join_time.strftime('%H:%M') }} UTC
+                    </div>
+                    {% else %}
+                    <div style="font-size:0.62rem;color:#64748b;margin-top:1px;">Did not open chat</div>
+                    {% endif %}
+                </div>
+                {% if bk.tutor_join_time %}
+                <span class="join-badge join-yes">✓ Joined</span>
+                {% else %}
+                <span class="join-badge join-no">✗ No-Show</span>
+                {% endif %}
+            </div>
+
+            <!-- Learner Join Status -->
+            <div class="join-row">
+                <div>
+                    <div style="font-size:0.72rem;font-weight:600;color:#e2e8f0;">
+                        📚 {{ learner.name if learner else 'Learner' }}
+                        <span style="font-size:0.62rem;color:#475569;font-weight:400;">(Learner)</span>
+                    </div>
+                    {% if bk.learner_join_time %}
+                    <div style="font-size:0.62rem;color:#64748b;margin-top:1px;">
+                        Joined at {{ bk.learner_join_time.strftime('%H:%M') }} UTC
+                    </div>
+                    {% else %}
+                    <div style="font-size:0.62rem;color:#64748b;margin-top:1px;">Did not open chat</div>
+                    {% endif %}
+                </div>
+                {% if bk.learner_join_time %}
+                <span class="join-badge join-yes">✓ Joined</span>
+                {% else %}
+                <span class="join-badge join-no">✗ No-Show</span>
+                {% endif %}
+            </div>
+
+            <!-- Confirmation Status -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:0.6rem;">
+                <div style="text-align:center;padding:0.4rem;border-radius:0.5rem;
+                    {% if bk.tutor_confirmed %}background:rgba(0,212,170,0.07);border:1px solid rgba(0,212,170,0.2);
+                    {% else %}background:rgba(239,68,68,0.05);border:1px solid rgba(239,68,68,0.15);{% endif %}">
+                    <div style="font-size:0.6rem;color:#64748b;font-weight:600;text-transform:uppercase;">Tutor Confirmed</div>
+                    <div style="font-size:0.85rem;margin-top:2px;">
+                        {% if bk.tutor_confirmed %}✅{% else %}❌{% endif %}
+                    </div>
+                </div>
+                <div style="text-align:center;padding:0.4rem;border-radius:0.5rem;
+                    {% if bk.learner_confirmed %}background:rgba(0,212,170,0.07);border:1px solid rgba(0,212,170,0.2);
+                    {% else %}background:rgba(239,68,68,0.05);border:1px solid rgba(239,68,68,0.15);{% endif %}">
+                    <div style="font-size:0.6rem;color:#64748b;font-weight:600;text-transform:uppercase;">Learner Confirmed</div>
+                    <div style="font-size:0.85rem;margin-top:2px;">
+                        {% if bk.learner_confirmed %}✅{% else %}❌{% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PANEL 2: Reporter's Message -->
+        <div class="d-panel">
+            <div class="d-panel-title">💬 Reporter's Message</div>
+
+            <!-- Who reported -->
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:0.75rem;">
+                <div style="width:32px;height:32px;border-radius:50%;
+                    background:linear-gradient(135deg,#7c3aed,#2563eb);
+                    display:flex;align-items:center;justify-content:center;
+                    font-size:0.8rem;font-weight:700;color:#fff;flex-shrink:0;">
+                    {{ d.user.name[0]|upper }}
+                </div>
+                <div>
+                    <div style="font-size:0.78rem;font-weight:700;color:#e2e8f0;">{{ d.user.name }}</div>
+                    <div style="font-size:0.62rem;color:#64748b;text-transform:capitalize;">
+                        {{ d.user.role }} · {{ d.user.email }}
+                    </div>
+                </div>
+            </div>
+
+            <!-- The issue message -->
+            <div class="reporter-msg">
+                "{{ d.reason }}"
+            </div>
+
+            <!-- Admin notes if already set -->
+            {% if d.admin_notes %}
+            <div style="margin-top:0.75rem;padding:0.5rem 0.75rem;border-radius:0.5rem;
+                background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.15);">
+                <div style="font-size:0.6rem;color:#818cf8;font-weight:700;text-transform:uppercase;margin-bottom:3px;">Admin Notes</div>
+                <div style="font-size:0.75rem;color:#94a3b8;">{{ d.admin_notes }}</div>
+            </div>
+            {% endif %}
+
+            <!-- Booking context -->
+            <div style="margin-top:0.85rem;display:flex;flex-direction:column;gap:4px;">
+                <div style="font-size:0.65rem;color:#334155;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px;">Booking Info</div>
+                <div style="font-size:0.72rem;color:#64748b;">
+                    💰 Price: <span style="color:#f59e0b;font-weight:700;">{{ bk.listing.price }} 🪙</span>
+                </div>
+                <div style="font-size:0.72rem;color:#64748b;">
+                    📌 Status: <span style="font-weight:700;
+                        {% if bk.status == 'Confirmed' %}color:#00d4aa;
+                        {% elif bk.status == 'Cancelled' %}color:#f87171;
+                        {% else %}color:#f59e0b;{% endif %}">{{ bk.status }}</span>
+                </div>
+                <div style="font-size:0.72rem;color:#64748b;">
+                    🕒 Booked on: {{ bk.timestamp.strftime('%d %b %Y') }}
+                </div>
+            </div>
+        </div>
+
+        <!-- PANEL 3: Admin Judgment -->
+        <div class="d-panel">
+            <div class="d-panel-title">⚖️ Admin Judgment</div>
+
+            {% if d.status == 'Open' %}
+
+            {% if esc %}
+            <!-- Escrow held → full resolution options -->
+            <div style="background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);
+                border-radius:0.6rem;padding:0.6rem 0.8rem;margin-bottom:0.75rem;">
+                <div style="font-size:0.6rem;color:#f59e0b;font-weight:700;text-transform:uppercase;margin-bottom:3px;">Escrow Held</div>
+                <div style="font-size:0.95rem;font-weight:800;color:#f59e0b;">{{ esc.amount }} 🪙</div>
+            </div>
+
+            <!-- Quick guidance hint -->
+            <div style="font-size:0.68rem;color:#475569;line-height:1.6;margin-bottom:0.75rem;padding:0.5rem 0.7rem;
+                background:rgba(0,0,0,0.2);border-radius:0.5rem;border-left:2px solid #334155;">
+                <strong style="color:#64748b;">Guidance:</strong><br>
+                • Both joined → <em style="color:#00d4aa;">Release or Split</em><br>
+                • Tutor no-show → <em style="color:#f87171;">Penalty (40%)</em><br>
+                • Learner no-show → <em style="color:#60a5fa;">Release to Tutor</em><br>
+                • Both absent → <em style="color:#f59e0b;">Refund Learner</em>
+            </div>
+
+            <form method="POST" action="{{ url_for('admin_resolve_dispute', dispute_id=d.id) }}"
+                onsubmit="return confirm('Apply this resolution? This cannot be undone.')">
+                <select name="action" class="action-select" required>
+                    <option value="">— Select Resolution —</option>
+                    <option value="release">💰 Release to Tutor (−5% platform fee)</option>
+                    <option value="refund">🔄 Full Refund to Learner</option>
+                    <option value="split">✂️ Split 50/50</option>
+                    <option value="penalty">⚠️ Tutor Penalty — 40% from tutor (20% learner, 20% system)</option>
+                </select>
+                <textarea name="admin_notes" class="notes-input" rows="2"
+                    placeholder="Admin notes / reason for decision…"></textarea>
+                <button type="submit" class="btn btn-primary"
+                    style="width:100%;font-size:0.75rem;padding:0.45rem;">
+                    ⚖️ Apply Judgment
+                </button>
+            </form>
+
+            {% else %}
+            <!-- No escrow → dismiss only -->
+            <div style="font-size:0.73rem;color:#64748b;margin-bottom:0.75rem;line-height:1.5;">
+                No escrow is currently held for this booking. You can only dismiss this dispute.
+            </div>
+            <form method="POST" action="{{ url_for('admin_resolve_dispute', dispute_id=d.id) }}"
+                onsubmit="return confirm('Dismiss this dispute?')">
+                <input type="hidden" name="action" value="close_only">
+                <textarea name="admin_notes" class="notes-input" rows="2"
+                    placeholder="Reason for dismissal…"></textarea>
+                <button type="submit" class="btn btn-outline"
+                    style="width:100%;font-size:0.75rem;padding:0.45rem;border-color:rgba(239,68,68,0.35);color:#f87171;">
+                    ✕ Dismiss Dispute
+                </button>
+            </form>
+            {% endif %}
+
+            {% else %}
+            <!-- Already resolved -->
+            <div style="text-align:center;padding:1.5rem 0;">
+                <div style="font-size:2rem;margin-bottom:0.4rem;">✅</div>
+                <div style="font-size:0.82rem;color:#00d4aa;font-weight:700;">Resolved</div>
+                {% if d.admin_notes %}
+                <div style="font-size:0.72rem;color:#64748b;margin-top:0.5rem;font-style:italic;">{{ d.admin_notes }}</div>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+
+    </div><!-- /d-card-body -->
+</div><!-- /d-card -->
+{% endfor %}
+
+{% else %}
+<div class="card" style="text-align:center;padding:3rem;">
+    <div style="font-size:2.5rem;margin-bottom:0.75rem;">✅</div>
+    <div style="font-size:1rem;font-weight:700;color:#00d4aa;">No active disputes</div>
+    <div style="font-size:0.78rem;color:#64748b;margin-top:0.4rem;">All sessions are running smoothly.</div>
+</div>
+{% endif %}
+
+{% endblock %}

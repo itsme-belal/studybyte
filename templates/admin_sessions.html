@@ -1,112 +1,263 @@
 {% extends "base.html" %}
+{% block title %}Live Session Monitor — Admin{% endblock %}
 
 {% block content %}
-<div class="flex justify-between items-center mb-4">
-    <h2 class="text-teal">📡 Live Session Tracker</h2>
-    <div class="text-sm text-muted">
-        Auto-refreshes every 15 seconds <span class="status status-pending ml-2" id="sync-indicator">Syncing...</span>
+<style>
+.sessions-stat-bar {
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:0.85rem;margin-bottom:1.75rem;
+}
+.ss-card {
+    padding:1rem 1.25rem;border-radius:0.9rem;text-align:center;
+    background:rgba(10,18,40,0.7);border:1px solid rgba(148,163,184,0.1);
+}
+.session-table { width:100%;border-collapse:collapse;font-size:0.82rem; }
+.session-table th {
+    font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;
+    color:#64748b;padding:0.5rem 0.75rem;text-align:left;
+    border-bottom:1px solid rgba(148,163,184,0.1);white-space:nowrap;
+}
+.session-table td { padding:0.65rem 0.75rem;border-bottom:1px solid rgba(148,163,184,0.05);vertical-align:middle; }
+.session-table tr:hover td { background:rgba(0,212,170,0.02); }
+.section-card {
+    border-radius:1.1rem;overflow:hidden;
+    background:linear-gradient(145deg,rgba(10,18,40,0.85),rgba(5,10,23,0.95));
+    border:1px solid rgba(148,163,184,0.1);
+    box-shadow:0 8px 32px rgba(0,0,0,0.3);margin-bottom:1.25rem;
+}
+.section-header {
+    padding:0.9rem 1.25rem;border-bottom:1px solid rgba(148,163,184,0.08);
+    display:flex;align-items:center;gap:10px;
+}
+.force-close-form { display:inline-flex;gap:4px;align-items:stretch; }
+.fc-reason {
+    font-size:0.72rem;padding:0.3rem 0.6rem;border-radius:0.4rem;
+    background:rgba(5,10,23,0.9)!important;color:#e2e8f0!important;
+    border:1px solid rgba(239,68,68,0.25)!important;font-family:inherit;width:130px;
+}
+.sync-badge {
+    display:inline-flex;align-items:center;gap:5px;font-size:0.68rem;
+    padding:3px 10px;border-radius:9999px;
+    background:rgba(0,212,170,0.08);border:1px solid rgba(0,212,170,0.2);color:#00d4aa;
+}
+</style>
+
+<!-- Header -->
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.5rem;flex-wrap:wrap;gap:0.75rem;">
+    <div>
+        <h2 style="font-size:1.3rem;font-weight:800;color:var(--text-heading);margin-bottom:4px;">
+            📡 Live Session Monitor
+        </h2>
+        <p style="font-size:0.78rem;color:#64748b;">Real-time view of all platform sessions. Force-close any active session from here.</p>
+    </div>
+    <div style="display:flex;gap:0.6rem;align-items:center;">
+        <span class="sync-badge" id="sync-badge">🔄 Auto-refresh in <span id="countdown">15</span>s</span>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline" style="font-size:0.78rem;padding:0.4rem 0.9rem;">← Admin</a>
     </div>
 </div>
 
-<div class="dashboard-grid" style="grid-template-columns: 1fr;">
-    
-    <!-- Currently Running / Confirmed -->
-    <div class="card p-4" style="border-left: 4px solid var(--success);">
-        <h3 class="mb-4">🟢 Running & Upcoming Confirmed Sessions</h3>
-        <table style="width: 100%; border-collapse: collapse; text-align: left;" class="text-sm">
-            <tr class="border-bottom text-muted">
-                <th class="pb-2">Booking ID</th>
-                <th class="pb-2">Course</th>
-                <th class="pb-2">Tutor</th>
-                <th class="pb-2">Student</th>
-                <th class="pb-2">Status & Escrow</th>
-                <th class="pb-2">Time Slot</th>
-            </tr>
-            {% for r in running %}
-            <tr class="border-bottom hover:bg-[rgba(255,255,255,0.02)]">
-                <td class="py-3 font-bold">#{{ r.id }}</td>
-                <td class="py-3">{{ r.listing.title }}</td>
-                <td class="py-3 text-teal">{{ r.listing.tutor.name }}</td>
-                <td class="py-3 text-warning">{{ r.learner.name }}</td>
-                <td class="py-3">
-                    <span class="status status-confirmed">Confirmed</span>
-                    <span class="text-xs ml-1">{{ r.listing.price }} Hold</span>
-                </td>
-                <td class="py-3">{{ r.slot.date }} ({{ r.slot.start_time }}-{{ r.slot.end_time }})</td>
-            </tr>
-            {% else %}
-            <tr><td colspan="6" class="py-4 text-center text-muted">No confirmed running sessions at this time.</td></tr>
-            {% endfor %}
-        </table>
+<!-- Stats -->
+<div class="sessions-stat-bar">
+    <div class="ss-card">
+        <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:6px;">🟢 Running</div>
+        <div style="font-size:1.8rem;font-weight:800;color:#00d4aa;">{{ running|length }}</div>
     </div>
-
-    <!-- Scheduled / Waiting -->
-    <div class="card p-4" style="border-left: 4px solid var(--warning);">
-        <h3 class="mb-4">🟡 Pending Booking Requests</h3>
-        <table style="width: 100%; border-collapse: collapse; text-align: left;" class="text-sm">
-            <tr class="border-bottom text-muted">
-                <th class="pb-2">Booking ID</th>
-                <th class="pb-2">Course</th>
-                <th class="pb-2">Tutor</th>
-                <th class="pb-2">Student</th>
-                <th class="pb-2">Status</th>
-                <th class="pb-2">Date/Time</th>
-            </tr>
-            {% for s in scheduled %}
-            <tr class="border-bottom transition-all">
-                <td class="py-3 font-bold">#{{ s.id }}</td>
-                <td class="py-3">{{ s.listing.title }}</td>
-                <td class="py-3">{{ s.listing.tutor.name }}</td>
-                <td class="py-3">{{ s.learner.name }}</td>
-                <td class="py-3"><span class="status status-pending">Waiting For Tutor</span></td>
-                <td class="py-3">{{ s.slot.date }} @ {{ s.slot.start_time }}</td>
-            </tr>
-            {% else %}
-            <tr><td colspan="6" class="py-4 text-center text-muted">No pending queues.</td></tr>
-            {% endfor %}
-        </table>
+    <div class="ss-card">
+        <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:6px;">🟡 Pending</div>
+        <div style="font-size:1.8rem;font-weight:800;color:#f59e0b;">{{ scheduled|length }}</div>
     </div>
+    <div class="ss-card">
+        <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:6px;">📜 Total Past</div>
+        <div style="font-size:1.8rem;font-weight:800;color:#94a3b8;">{{ past|length }}</div>
+    </div>
+    <div class="ss-card">
+        <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:6px;">📋 All Time</div>
+        <div style="font-size:1.8rem;font-weight:800;color:#7c3aed;">{{ running|length + scheduled|length + past|length }}</div>
+    </div>
+</div>
 
-    <!-- Cancelled / Expired / Completed Logs -->
-    <div class="card p-4" style="border-left: 4px solid var(--danger);">
-        <div class="flex justify-between items-center mb-4">
-            <h3>🔴 Past Session Logs</h3>
-            <button class="btn btn-sm btn-outline text-xs" onclick="window.print()">Export Logs to PDF</button>
-        </div>
-        <div style="max-height: 300px; overflow-y: auto;">
-            <table style="width: 100%; border-collapse: collapse; text-align: left;" class="text-sm">
-                <tr class="border-bottom text-muted">
-                    <th class="pb-2">Booking ID</th>
-                    <th class="pb-2">Course</th>
-                    <th class="pb-2">Tutor / Student</th>
-                    <th class="pb-2">Resolution</th>
-                    <th class="pb-2">Created</th>
-                </tr>
-                {% for p in past %}
-                <tr class="border-bottom">
-                    <td class="py-2">#{{ p.id }}</td>
-                    <td class="py-2">{{ p.listing.title }}</td>
-                    <td class="py-2">{{ p.listing.tutor.name }} / {{ p.learner.name }}</td>
-                    <td class="py-2">
-                        <span class="status status-{{ 'completed' if p.status == 'Completed' else 'cancelled' }}">{{ p.status }}</span>
-                    </td>
-                    <td class="py-2">{{ p.timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
-                </tr>
+<!-- ─── CONFIRMED / RUNNING ─── -->
+<div class="section-card" style="border-left:3px solid #00d4aa;">
+    <div class="section-header">
+        <span style="width:10px;height:10px;border-radius:50%;background:#00d4aa;box-shadow:0 0 8px #00d4aa;display:inline-block;"></span>
+        <h3 style="font-size:0.95rem;font-weight:700;color:#f8fafc;margin:0;">Confirmed — Running Sessions</h3>
+        <span style="margin-left:auto;font-size:0.72rem;color:#64748b;">{{ running|length }} active</span>
+    </div>
+    <div style="overflow-x:auto;">
+    <table class="session-table">
+        <thead>
+            <tr>
+                <th>BKG ID</th>
+                <th>Course</th>
+                <th>Tutor</th>
+                <th>Learner</th>
+                <th>Slot</th>
+                <th>Escrow</th>
+                <th>Confirmations</th>
+                <th>🔴 Force Close</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for r in running %}
+        <tr>
+            <td><span style="font-weight:700;color:#00d4aa;">BKG-{{ r.id }}</span></td>
+            <td style="max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ r.listing.title }}</td>
+            <td style="color:#00d4aa;font-weight:600;">{{ r.listing.tutor.name }}</td>
+            <td style="color:#f59e0b;">{{ r.learner.name }}</td>
+            <td style="color:#94a3b8;white-space:nowrap;">
+                {{ r.slot.date }}<br>
+                <span style="font-size:0.7rem;">{{ r.slot.start_time }}–{{ r.slot.end_time }}</span>
+            </td>
+            <td>
+                {% set esc = r.escrow_transactions | selectattr('status','equalto','Held') | first %}
+                {% if esc %}
+                <span style="color:#f59e0b;font-weight:700;">{{ esc.amount }} 🪙</span>
                 {% else %}
-                <tr><td colspan="5" class="py-4 text-center text-muted">No historical logs.</td></tr>
-                {% endfor %}
-            </table>
-        </div>
+                <span style="color:#64748b;font-size:0.72rem;">—</span>
+                {% endif %}
+            </td>
+            <td>
+                <div style="font-size:0.72rem;line-height:1.8;">
+                    <span style="color:{% if r.tutor_confirmed %}#00d4aa{% else %}#f87171{% endif %};">
+                        {% if r.tutor_confirmed %}✔{% else %}✗{% endif %} Tutor
+                    </span><br>
+                    <span style="color:{% if r.learner_confirmed %}#00d4aa{% else %}#f87171{% endif %};">
+                        {% if r.learner_confirmed %}✔{% else %}✗{% endif %} Learner
+                    </span>
+                </div>
+            </td>
+            <td>
+                <form method="POST" action="{{ url_for('force_close_session', booking_id=r.id) }}"
+                    class="force-close-form"
+                    onsubmit="return confirm('Force-close BKG-{{ r.id }}? Learner will be refunded from escrow. This cannot be undone.')">
+                    <input name="reason" class="fc-reason" placeholder="Reason…" required>
+                    <button type="submit" class="btn btn-outline"
+                        style="font-size:0.7rem;padding:0.3rem 0.65rem;border-color:rgba(239,68,68,0.4);color:#f87171;white-space:nowrap;">
+                        🔴 Close
+                    </button>
+                </form>
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="8" style="text-align:center;padding:2rem;color:#334155;">
+                <div style="font-size:1.5rem;margin-bottom:6px;">🟢</div>
+                No active confirmed sessions right now.
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</div>
+
+<!-- ─── PENDING ─── -->
+<div class="section-card" style="border-left:3px solid #f59e0b;">
+    <div class="section-header">
+        <span style="width:10px;height:10px;border-radius:50%;background:#f59e0b;box-shadow:0 0 8px #f59e0b;display:inline-block;"></span>
+        <h3 style="font-size:0.95rem;font-weight:700;color:#f8fafc;margin:0;">Pending — Awaiting Tutor Confirmation</h3>
+        <span style="margin-left:auto;font-size:0.72rem;color:#64748b;">{{ scheduled|length }}</span>
+    </div>
+    <div style="overflow-x:auto;">
+    <table class="session-table">
+        <thead>
+            <tr>
+                <th>BKG ID</th>
+                <th>Course</th>
+                <th>Tutor</th>
+                <th>Learner</th>
+                <th>Slot</th>
+                <th>Price</th>
+                <th>🔴 Force Cancel</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for s in scheduled %}
+        <tr>
+            <td><span style="font-weight:700;color:#f59e0b;">BKG-{{ s.id }}</span></td>
+            <td style="max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ s.listing.title }}</td>
+            <td>{{ s.listing.tutor.name }}</td>
+            <td style="color:#f59e0b;">{{ s.learner.name }}</td>
+            <td style="color:#94a3b8;white-space:nowrap;">
+                {{ s.slot.date }}<br><span style="font-size:0.7rem;">{{ s.slot.start_time }}</span>
+            </td>
+            <td><span style="color:#00d4aa;font-weight:700;">{{ s.listing.price }} 🪙</span></td>
+            <td>
+                <form method="POST" action="{{ url_for('force_close_session', booking_id=s.id) }}"
+                    class="force-close-form"
+                    onsubmit="return confirm('Force-cancel BKG-{{ s.id }}? Learner payment will be refunded.')">
+                    <input name="reason" class="fc-reason" placeholder="Reason…" required>
+                    <button type="submit" class="btn btn-outline"
+                        style="font-size:0.7rem;padding:0.3rem 0.65rem;border-color:rgba(239,68,68,0.4);color:#f87171;white-space:nowrap;">
+                        🔴 Cancel
+                    </button>
+                </form>
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="7" style="text-align:center;padding:2rem;color:#334155;">
+                <div style="font-size:1.5rem;margin-bottom:6px;">✅</div>
+                No pending sessions.
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</div>
+
+<!-- ─── PAST LOGS ─── -->
+<div class="section-card" style="border-left:3px solid #475569;">
+    <div class="section-header">
+        <span style="font-size:0.95rem;">📜</span>
+        <h3 style="font-size:0.95rem;font-weight:700;color:#f8fafc;margin:0;">Past Session Logs</h3>
+        <button onclick="window.print()" class="btn btn-outline ml-auto"
+            style="font-size:0.72rem;padding:0.3rem 0.75rem;margin-left:auto;">🖨 Export PDF</button>
+    </div>
+    <div style="max-height:320px;overflow-y:auto;">
+    <table class="session-table">
+        <thead>
+            <tr>
+                <th>BKG ID</th>
+                <th>Course</th>
+                <th>Tutor / Learner</th>
+                <th>Date</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for p in past %}
+        <tr>
+            <td style="color:#64748b;font-weight:600;">BKG-{{ p.id }}</td>
+            <td style="max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#94a3b8;">{{ p.listing.title }}</td>
+            <td style="font-size:0.75rem;color:#64748b;">{{ p.listing.tutor.name }} / {{ p.learner.name }}</td>
+            <td style="font-size:0.72rem;color:#475569;white-space:nowrap;">{{ p.slot.date if p.slot else '—' }}</td>
+            <td>
+                <span class="status status-{{ 'completed' if p.status == 'Completed' else 'cancelled' }}"
+                    style="font-size:0.7rem;">{{ p.status }}</span>
+            </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" style="text-align:center;padding:1.5rem;color:#334155;">No logs yet.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
     </div>
 </div>
 
 <script>
-    // Simple polling mechanism to refresh the page strictly for admin active sessions UI
-    setInterval(() => {
-        const ind = document.getElementById('sync-indicator');
-        ind.style.backgroundColor = 'var(--success)';
-        ind.innerText = 'Refreshed';
+// Countdown auto-refresh
+let secs = 15;
+const countEl = document.getElementById('countdown');
+const badge   = document.getElementById('sync-badge');
+const iv = setInterval(() => {
+    secs--;
+    if (countEl) countEl.textContent = secs;
+    if (secs <= 0) {
+        clearInterval(iv);
+        if (badge) { badge.style.color = '#00d4aa'; badge.innerHTML = '🔄 Refreshing…'; }
         window.location.reload();
-    }, 15000); // 15s interval sync
+    }
+}, 1000);
 </script>
 {% endblock %}

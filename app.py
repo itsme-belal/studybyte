@@ -1,42 +1,71 @@
+import os
+from dotenv import load_dotenv
+load_dotenv()  # Loads .env file locally; safely ignored on Render (env vars are set there directly)
+
+# ── eventlet monkey-patch: ONLY in production (Render).
+# eventlet is incompatible with Python 3.12 locally; we use threading mode instead.
+_is_production = os.environ.get('FLASK_ENV') == 'production'
+if _is_production:
+    import eventlet
+    eventlet.monkey_patch()
+
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_from_directory, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from flask_sqlalchemy import SQLAlchemy
 from flask_socketio import SocketIO, emit, join_room, leave_room
-from datetime import datetime
-import os, random, string, re, uuid
+from datetime import datetime, timedelta
+import random, string, re, uuid, smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+
+# ── All secrets loaded from environment variables ──────────────────────────────
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'studybyte-super-secret-ewu'
-database_url = os.environ.get('DATABASE_URL')
-if not database_url:
-    if os.environ.get('VERCEL'):
-        database_url = 'sqlite:////tmp/studybyte_v5.db' # Vercel-safe fallback
-    else:
-        database_url = 'sqlite:///studybyte_v5.db' # Local Windows fallback
-elif database_url.startswith("postgres://"):
-    database_url = database_url.replace("postgres://", "postgresql://", 1)
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-only-change-in-production')
+
+# ── Database: Supabase PostgreSQL on Render, SQLite locally ───────────────────
+database_url = os.environ.get('DATABASE_URL', 'sqlite:///studybyte_v5.db')
+if database_url.startswith('postgres://'):
+    # Supabase / Heroku-style URLs use postgres:// which SQLAlchemy requires as postgresql://
+    database_url = database_url.replace('postgres://', 'postgresql://', 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['UPLOAD_FOLDER'] = os.path.join(app.root_path, 'uploads')
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,       # Reconnects dropped connections automatically
+    'pool_recycle': 300,         # Recycle connections every 5 min (Supabase idle limit)
+}
 
+# ── File uploads: local disk for dev, /tmp for cloud ──────────────────────────
+upload_folder = os.path.join(app.root_path, 'uploads')
 try:
-    if not os.path.exists(app.config['UPLOAD_FOLDER']):
-        os.makedirs(app.config['UPLOAD_FOLDER'])
+    os.makedirs(upload_folder, exist_ok=True)
 except OSError:
-    # Fallback for Vercel read-only serverless environments
-    app.config['UPLOAD_FOLDER'] = '/tmp/uploads'
-    if not os.path.exists(app.config['UPLOAD_FOLDER']):
-        os.makedirs(app.config['UPLOAD_FOLDER'])
+    upload_folder = '/tmp/uploads'
+    os.makedirs(upload_folder, exist_ok=True)
+app.config['UPLOAD_FOLDER'] = upload_folder
 
 db = SQLAlchemy(app)
-socketio = SocketIO(app)
+
+# ── SocketIO: eventlet on Render, threading locally (Python 3.12 compatible) ──
+_async_mode = 'eventlet' if _is_production else 'threading'
+socketio = SocketIO(
+    app,
+    async_mode=_async_mode,
+    cors_allowed_origins=os.environ.get('CORS_ORIGINS', '*'),
+    logger=False,
+    engineio_logger=False,
+)
 
 # ----------------- MODELS -----------------
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(100), unique=True, nullable=True)
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(100), unique=True, nullable=False)
     password_hash = db.Column(db.String(200), nullable=False)
@@ -50,6 +79,8 @@ class User(db.Model):
     is_verified = db.Column(db.Boolean, default=False)
     grade_report = db.Column(db.String(255), nullable=True)
     rejection_reason = db.Column(db.Text, nullable=True)
+    created_date = db.Column(db.DateTime, default=datetime.utcnow)
+    last_login = db.Column(db.DateTime, default=datetime.utcnow)
     
     # New Profile Fields
     theme_preference = db.Column(db.String(20), default='system')
@@ -102,7 +133,7 @@ class AvailabilitySlot(db.Model):
     end_time = db.Column(db.String(10), nullable=False)
     is_booked = db.Column(db.Boolean, default=False)
     is_frozen = db.Column(db.Boolean, default=False)
-    tutor = db.relationship('User', foreign_keys=[tutor_id])
+    tutor = db.relationship('User', foreign_keys=[tutor_id], backref='slots')
 
 class TopicListing(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -112,6 +143,8 @@ class TopicListing(db.Model):
     description = db.Column(db.Text, nullable=False)
     price = db.Column(db.Float, nullable=False)
     is_advertised = db.Column(db.Boolean, default=False)
+    ad_expiry_time = db.Column(db.DateTime, nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     tutor = db.relationship('User', backref='listings', foreign_keys=[tutor_id])
 
 class Booking(db.Model):
@@ -125,6 +158,10 @@ class Booking(db.Model):
     # Replaces the old easily-exploited meeting code.
     tutor_confirmed = db.Column(db.Boolean, default=False)
     learner_confirmed = db.Column(db.Boolean, default=False)
+    tutor_join_time = db.Column(db.DateTime, nullable=True)
+    learner_join_time = db.Column(db.DateTime, nullable=True)
+    tutor_left_time = db.Column(db.DateTime, nullable=True)
+    learner_left_time = db.Column(db.DateTime, nullable=True)
     # ----------------------------
 
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
@@ -139,6 +176,7 @@ class EscrowTransaction(db.Model):
     booking_id = db.Column(db.Integer, db.ForeignKey('booking.id'), nullable=False)
     amount = db.Column(db.Float, nullable=False)
     status = db.Column(db.String(20), default='Held')
+    booking = db.relationship('Booking', backref='escrow_transactions', foreign_keys=[booking_id])
 
 class Review(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -179,6 +217,44 @@ class Notification(db.Model):
     is_read = db.Column(db.Boolean, default=False)
     action_url = db.Column(db.String(255), nullable=True)
 
+class ActivityLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    action_type = db.Column(db.String(50), nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+class Dispute(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    booking_id = db.Column(db.Integer, db.ForeignKey('booking.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False) # Reporter
+    reason = db.Column(db.Text, nullable=False)
+    category = db.Column(db.String(100), nullable=False)
+    status = db.Column(db.String(20), default='Open')
+    admin_notes = db.Column(db.Text, nullable=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    booking = db.relationship('Booking')
+    user = db.relationship('User')
+
+class SystemFinance(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    total_revenue = db.Column(db.Float, default=0.0)
+    total_expenses = db.Column(db.Float, default=0.0)
+    net_profit = db.Column(db.Float, default=0.0)
+    last_updated = db.Column(db.DateTime, default=datetime.utcnow)
+
+class SupportTicket(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    subject = db.Column(db.String(200), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), default='Open') # strictly 'Open' or 'Closed'
+    admin_reply = db.Column(db.Text, nullable=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    user = db.relationship('User', backref=db.backref('support_tickets', lazy=True))
+
 _db_initialized = False
 
 @app.before_request
@@ -187,16 +263,96 @@ def initialize_database():
     if not _db_initialized:
         try:
             db.create_all()
+            # ── Auto-create admin from environment variables only ──────────────────
+            # Set ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_NAME in your Render env vars.
+            # If not set, no admin is created automatically (must be done manually).
+            admin_email    = os.environ.get('ADMIN_EMAIL')
+            admin_password = os.environ.get('ADMIN_PASSWORD')
+            admin_name     = os.environ.get('ADMIN_NAME', 'Platform Admin')
+
             if not User.query.filter_by(role='admin').first():
-                admin = User(name='Platform Admin', email='admin@studybyte.edu', password_hash=generate_password_hash('admin123'), role='admin')
-                db.session.add(admin)
-                db.session.commit()
+                if admin_email and admin_password:
+                    admin = User(
+                        name=admin_name,
+                        email=admin_email,
+                        password_hash=generate_password_hash(admin_password),
+                        role='admin',
+                        status='Active',
+                        is_verified=True
+                    )
+                    db.session.add(admin)
+                    db.session.commit()
+                else:
+                    print("WARNING: No admin account exists. Set ADMIN_EMAIL and ADMIN_PASSWORD env vars to auto-create one.")
             _db_initialized = True
         except Exception as e:
             print(f"CRITICAL DATABASE ERROR: {e}")
-            _db_initialized = True # Prevent infinite retry loops that drain database connections
+            _db_initialized = True  # Prevent infinite retry loops that drain database connections
 
 # ----------------- UTILS -----------------
+
+def update_system_finance(revenue=0.0, expense=0.0):
+    try:
+        sf = SystemFinance.query.first()
+        if not sf:
+            sf = SystemFinance(total_revenue=0.0, total_expenses=0.0, net_profit=0.0)
+            db.session.add(sf)
+        sf.total_revenue += revenue
+        sf.total_expenses += expense
+        sf.net_profit = sf.total_revenue - sf.total_expenses
+        sf.last_updated = datetime.utcnow()
+        db.session.commit()
+    except Exception as e:
+        print(f"Failed to update system finance: {e}")
+        db.session.rollback()
+
+def log_activity(user_id, action_type, description):
+    try:
+        activity = ActivityLog(user_id=user_id, action_type=action_type, description=description)
+        db.session.add(activity)
+        db.session.commit()
+        # emit to admin room — safe-guarded for serverless environments
+        try:
+            socketio.emit('new_activity', {
+                'action_type': action_type,
+                'description': description,
+                'time': 'Just now'
+            }, room='admin_feed')
+        except Exception:
+            pass
+    except Exception as e:
+        print(f"Failed to log activity: {e}")
+
+def send_verification_email(to_email, code):
+    """
+    Sends a 6-digit verification code to the specified email using Gmail SMTP.
+    Requires EMAIL_USER and EMAIL_PASS environment variables.
+    """
+    email_user = os.environ.get('EMAIL_USER')
+    email_pass = os.environ.get('EMAIL_PASS')
+    
+    if not email_user or not email_pass:
+        print("WARNING: EMAIL_USER or EMAIL_PASS not set. Email not sent.")
+        return False
+        
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = email_user
+        msg['To'] = to_email
+        msg['Subject'] = "StudyByte Password Reset Code"
+        
+        body = f"Your verification code is: {code}"
+        msg.attach(MIMEText(body, 'plain'))
+        
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(email_user, email_pass)
+        server.send_message(msg)
+        server.quit()
+        return True
+    except Exception as e:
+        print(f"SMTP Error: {e}")
+        return False
 
 @app.context_processor
 def inject_user():
@@ -207,6 +363,15 @@ def inject_user():
         user = User.query.get(session['user_id'])
         if user:
             wallet = Wallet.query.filter_by(user_id=user.id).first()
+            # Retroactive fix: Create wallet if missing (especially for Google Auth users)
+            if not wallet and user.role != 'admin':
+                wallet = Wallet(user_id=user.id, balance=0)
+                db.session.add(wallet)
+                try:
+                    db.session.commit()
+                except:
+                    db.session.rollback()
+            
             notifications = Notification.query.filter_by(user_id=user.id, is_read=False).order_by(Notification.timestamp.desc()).all()
     return dict(current_user=user, wallet=wallet, unread_notifications=notifications)
 
@@ -237,33 +402,177 @@ def check_and_freeze_slots():
             modified = True
             notif = Notification(user_id=slot.tutor_id, message=f"Your course slot on {slot.date} has expired. Please add new time slots.", action_url='/tutor/availability')
             db.session.add(notif)
+            
+    expired_bookings = Booking.query.join(AvailabilitySlot).filter(Booking.status == 'Pending').all()
+    for b in expired_bookings:
+        if b.slot.date < now_str or (b.slot.date == now_str and b.slot.end_time < time_str):
+            b.status = 'Cancelled'
+            learner_wallet = Wallet.query.filter_by(user_id=b.learner_id).first()
+            if learner_wallet:
+                learner_wallet.balance += b.listing.price
+                tx = TransactionHistory(user_id=b.learner_id, amount=b.listing.price, type='Refund', description=f"Auto-Refund: Tutor no response for BKG-{b.id}")
+                db.session.add(tx)
+                
+                notif = Notification(user_id=b.learner_id, message=f"Booking BKG-{b.id} cancelled automatically (tutor unresponsive). Fully refunded.", action_url='/learner/dashboard')
+                db.session.add(notif)
+                notif_tutor = Notification(user_id=b.listing.tutor_id, message=f"Booking BKG-{b.id} expired automatically.", action_url='/tutor/dashboard')
+                db.session.add(notif_tutor)
+            modified = True
+            
+    # Session Auto-Close Logic
+    active_bookings = Booking.query.join(AvailabilitySlot).filter(Booking.status == 'Confirmed').all()
+    for b in active_bookings:
+        if b.slot.date < now_str or (b.slot.date == now_str and b.slot.end_time < time_str):
+            escrow = EscrowTransaction.query.filter_by(booking_id=b.id, status='Held').first()
+            if b.learner_confirmed and b.tutor_confirmed:
+                b.status = 'Completed'
+                if escrow:
+                    escrow.status = 'Released'
+                    tutor_wallet = Wallet.query.filter_by(user_id=b.listing.tutor_id).first()
+                    platform_fee = b.listing.price * 0.05
+                    tutor_payout = b.listing.price - platform_fee
+                    tutor_wallet.balance += tutor_payout
+                    update_system_finance(revenue=platform_fee)
+                    db.session.add(TransactionHistory(user_id=b.listing.tutor_id, amount=platform_fee, type='Commission', description=f"Platform Fee (BKG-{b.id})"))
+                    db.session.add(TransactionHistory(user_id=b.listing.tutor_id, amount=tutor_payout, type='Received', description=f"Escrow released: {b.listing.title} (after 5% fee)"))
+            elif b.tutor_confirmed and not b.learner_confirmed:
+                # Learner no-show
+                b.status = 'Completed'
+                if escrow:
+                    escrow.status = 'Released'
+                    tutor_wallet = Wallet.query.filter_by(user_id=b.listing.tutor_id).first()
+                    platform_fee = b.listing.price * 0.05
+                    tutor_payout = b.listing.price - platform_fee
+                    tutor_wallet.balance += tutor_payout
+                    update_system_finance(revenue=platform_fee)
+                    db.session.add(TransactionHistory(user_id=b.listing.tutor_id, amount=platform_fee, type='Commission', description=f"Platform Fee (BKG-{b.id})"))
+                    db.session.add(TransactionHistory(user_id=b.listing.tutor_id, amount=tutor_payout, type='Received', description=f"Learner No-Show: {b.listing.title} (after 5% fee)"))
+            elif b.learner_confirmed and not b.tutor_confirmed:
+                # Tutor no-show
+                b.status = 'Completed'
+                if escrow:
+                    escrow.status = 'Refunded'
+                    learner_wallet = Wallet.query.filter_by(user_id=b.learner_id).first()
+                    tutor_wallet = Wallet.query.filter_by(user_id=b.listing.tutor_id).first()
+                    
+                    # 40% penalty to tutor: 20% to learner, 20% to system
+                    penalty = b.listing.price * 0.40
+                    learner_comp = b.listing.price * 0.20
+                    system_comp = b.listing.price * 0.20
+                    
+                    tutor_wallet.balance -= penalty
+                    db.session.add(TransactionHistory(user_id=b.listing.tutor_id, amount=-penalty, type='Penalty', description=f"Tutor No-Show penalty: {b.listing.title}"))
+                    
+                    learner_wallet.balance += b.listing.price + learner_comp
+                    db.session.add(TransactionHistory(user_id=b.learner_id, amount=b.listing.price + learner_comp, type='Refund', description=f"Tutor No-Show Full Refund + Compensation"))
+                    
+                    update_system_finance(revenue=system_comp)
+            else:
+                # Neither confirmed -> Stuck Payment system
+                b.status = 'Payment Under Review'
+                # Escrow remains Held
+                
+            modified = True
+
     if modified:
-        db.session.commit()
+        # After freeze: notify any tutor who now has ZERO available slots
+        try:
+            db.session.flush()
+            affected_tutors = set(slot.tutor_id for slot in slots if slot.is_frozen)
+            for tutor_id in affected_tutors:
+                remaining = AvailabilitySlot.query.filter_by(
+                    tutor_id=tutor_id, is_booked=False, is_frozen=False
+                ).count()
+                if remaining == 0:
+                    db.session.add(Notification(
+                        user_id=tutor_id,
+                        message="⚠️ You have NO available time slots. Your courses are hidden from learners until you add new slots.",
+                        action_url='/tutor/availability'
+                    ))
+            db.session.commit()
+        except:
+            db.session.rollback()
+            
+    # Check Advertisement Expiry
+    expired_ads = TopicListing.query.filter(TopicListing.is_advertised == True, TopicListing.ad_expiry_time <= now).all()
+    if expired_ads:
+        for ad in expired_ads:
+            ad.is_advertised = False
+            ad.ad_expiry_time = None
+            notif = Notification(user_id=ad.tutor_id, message=f"Your advertisement for '{ad.title}' has expired.", action_url='/tutor/dashboard')
+            db.session.add(notif)
+        try:
+            db.session.commit()
+        except:
+            db.session.rollback()
 
 # ----------------- ROUTES -----------------
 
-@app.route('/db-test')
-def db_test():
-    global _db_initialized
-    try:
-        db.create_all()
-        return "Database connected and tables created successfully! Your URL is correct."
-    except Exception as e:
-        return f"DATABASE CONNECTION FAILED. ERROR DETAILS: {str(e)} <br><br> Make sure you did NOT leave brackets [ ] around your password in the Supabase URL, and if your password contains special characters like @ or #, you MUST change your database password in Supabase to only use letters and numbers!"
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    check_and_freeze_slots()
+
+    # Get tutors who have at least one available (not booked, not frozen) slot
+    active_tutor_ids = [
+        t[0] for t in db.session.query(AvailabilitySlot.tutor_id)
+        .filter_by(is_booked=False, is_frozen=False).distinct().all()
+    ]
+
+    # Suggested = advertised courses from verified tutors WITH available slots
+    suggested = (
+        TopicListing.query
+        .join(User)
+        .filter(
+            User.is_verified == True,
+            TopicListing.tutor_id.in_(active_tutor_ids),
+            TopicListing.is_advertised == True,
+            TopicListing.ad_expiry_time > datetime.utcnow()
+        )
+        .order_by(TopicListing.id.desc())
+        .limit(6).all()
+    )
+
+    # Pass current user for personalized navbar/greeting (None if not logged in)
+    current_user_obj = None
+    if 'user_id' in session:
+        current_user_obj = User.query.get(session['user_id'])
+
+    return render_template('index.html', suggested=suggested, current_user=current_user_obj)
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
         name = request.form['name']
+        username = request.form.get('username', '').strip()
         student_id = request.form['student_id']
         email = request.form['email']
         password = request.form['password']
         department = request.form['department']
         role = request.form['role']
+        
+        if not username:
+            flash('Username is required.', 'error')
+            return redirect(url_for('register'))
+        if User.query.filter_by(username=username).first():
+            flash('Username already exists. Please choose a different one.', 'error')
+            return redirect(url_for('register'))
+            
+        if not (6 <= len(password) <= 32):
+            flash('Password must be between 6 and 32 characters.', 'error')
+            return redirect(url_for('register'))
+        if not re.search(r'[a-z]', password) or not re.search(r'[A-Z]', password):
+            flash('Password must contain both uppercase and lowercase letters.', 'error')
+            return redirect(url_for('register'))
+        if not re.search(r'[0-9]', password):
+            flash('Password must contain at least one number.', 'error')
+            return redirect(url_for('register'))
+        if not re.search(r'[@#_]', password):
+            flash('Password must contain at least one special character (@, #, _).', 'error')
+            return redirect(url_for('register'))
+        if ' ' in password:
+            flash('Password cannot contain spaces.', 'error')
+            return redirect(url_for('register'))
         
         if not re.match(r'^\d{4}-[123]-\d{2}-\d{3}$', student_id):
             flash('Invalid Student ID format. Expected: YYYY-S-DDD-NNN (e.g. 2023-2-60-010)', 'error')
@@ -287,10 +596,11 @@ def register():
             return redirect(url_for('register'))
             
         user = User(
-            name=name, email=email, 
+            name=name, username=username, email=email, 
             password_hash=generate_password_hash(password),
             role=role,
-            studentId=student_id, department=department
+            studentId=student_id, department=department,
+            status='Active'
         )
         
         # ----------------------------
@@ -314,42 +624,148 @@ def register():
         db.session.add(user)
         db.session.commit()
         
-        # First 5 users get bonus
-        user_count = User.query.count()
-        if user_count <= 5:
-            bonus = 100.0
-        else:
-            bonus = 0.0
-            
-        wallet = Wallet(user_id=user.id, balance=bonus)
+        wallet = Wallet(user_id=user.id, balance=0)
         db.session.add(wallet)
-        if bonus > 0:
-            bonus_history = TransactionHistory(user_id=user.id, amount=bonus, type='Bonus', description='Sign-up Bonus')
-            db.session.add(bonus_history)
         db.session.commit()
         
-        if bonus > 0:
-            flash(f'Welcome! {int(bonus)} tokens have been added to your wallet as a sign-up bonus.', 'success')
-        else:
-            flash('Welcome! Registration successful.', 'success')
-        return redirect(url_for('login'))
+        log_activity(user.id, "REGISTER", f"New user registered: {user.name} ({user.role})")
+        
+        session['user_id'] = user.id
+        session['role'] = user.role
+        
+        flash('Registration successful! Please verify your email from the dashboard to unlock bonuses.', 'success')
+        if user.role == 'tutor':
+            return redirect(url_for('tutor_dashboard'))
+        return redirect(url_for('learner_dashboard'))
         
     return render_template('register.html')
+
+@app.route('/send_verification')
+@login_required
+def send_verification():
+    user = User.query.get(session['user_id'])
+    if user.is_verified:
+        flash("Already verified.", "info")
+        return redirect(url_for('learner_dashboard'))
+        
+    code = ''.join(random.choices(string.digits, k=6))
+    session['signup_email'] = user.email
+    session['signup_code'] = code
+    send_verification_email(user.email, code)
+    flash('Verification code sent to your email.', 'success')
+    return redirect(url_for('verify_signup'))
+
+@app.route('/verify_signup', methods=['GET', 'POST'])
+def verify_signup():
+    email = session.get('signup_email')
+    if not email:
+        flash('Session expired. Please request a new code.', 'error')
+        if 'user_id' in session:
+            return redirect(url_for('learner_dashboard'))
+        return redirect(url_for('login'))
+        
+    if request.method == 'POST':
+        code = request.form.get('code')
+        if not code or code != session.get('signup_code'):
+            flash('Invalid or expired code.', 'error')
+            return redirect(url_for('verify_signup'))
+            
+        user = User.query.filter_by(email=email).first()
+        if user:
+            user.is_verified = True
+            db.session.commit()
+            
+            # Bonus
+            user_count = User.query.filter(User.is_verified == True).count()
+            bonus = 100.0 if user_count <= 5 else 30.0 # Small bonus for all verify
+            
+            wallet = Wallet.query.filter_by(user_id=user.id).first()
+            if not wallet:
+                wallet = Wallet(user_id=user.id, balance=0)
+                db.session.add(wallet)
+            
+            if bonus > 0:
+                wallet.balance += bonus
+                bonus_history = TransactionHistory(user_id=user.id, amount=bonus, type='Bonus', description='Email Verification Bonus')
+                db.session.add(bonus_history)
+            
+            db.session.commit()
+            
+            session.pop('signup_email', None)
+            session.pop('signup_code', None)
+            
+            log_activity(user.id, "VERIFY", f"User {user.email} verified.")
+            
+            if bonus > 0:
+                flash(f'Account verified! {int(bonus)} token bonus added to your wallet.', 'success')
+            else:
+                flash('Account verified successfully!', 'success')
+            
+            if 'user_id' not in session:
+                return redirect(url_for('login'))
+            return redirect(url_for('learner_dashboard'))
+            
+    return render_template('verify_signup.html', email=email)
+
+@app.route('/tutor/listing/<int:listing_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_listing(listing_id):
+    if session['role'] != 'tutor':
+        return redirect(url_for('index'))
+    listing = TopicListing.query.get_or_404(listing_id)
+    if listing.tutor_id != session['user_id']:
+        return "Unauthorized", 403
+        
+    categories = ['Computer Science', 'Mathematics', 'Physics', 'Business', 'Languages', 'Arts']
+    if request.method == 'POST':
+        listing.title = request.form['title']
+        listing.description = request.form['description']
+        listing.price = float(request.form['price'])
+        listing.category = request.form['category']
+        listing.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        flash('Your listing was successfully updated!', 'success')
+        return redirect(url_for('tutor_dashboard'))
+        
+    avail_slots = AvailabilitySlot.query.filter_by(
+        tutor_id=listing.tutor_id, is_booked=False, is_frozen=False
+    ).order_by(AvailabilitySlot.date, AvailabilitySlot.start_time).all()
+    return render_template('edit_listing.html', listing=listing, categories=categories, avail_slots=avail_slots)
+
+@app.route('/tutor/listing/<int:listing_id>/delete', methods=['POST'])
+@login_required
+def delete_listing(listing_id):
+    if session['role'] != 'tutor':
+        return "Unauthorized", 403
+    listing = TopicListing.query.get_or_404(listing_id)
+    if listing.tutor_id != session['user_id']:
+        return "Unauthorized", 403
+        
+    active = Booking.query.filter_by(listing_id=listing.id).filter(Booking.status.in_(['Pending', 'Confirmed'])).first()
+    if active:
+        flash('Cannot delete listing with active bookings. Cancel them first.', 'error')
+        return redirect(url_for('tutor_dashboard'))
+        
+    db.session.delete(listing)
+    db.session.commit()
+    flash('Course listing has been deleted.', 'success')
+    return redirect(url_for('tutor_dashboard'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        email = request.form.get('email', '').strip()
+        email_or_username = request.form.get('email', '').strip()
         password = request.form.get('password', '')
         selected_role = request.form.get('role', 'learner')
-        
-        user = User.query.filter_by(email=email).first()
+        user = User.query.filter((User.email == email_or_username) | (User.username == email_or_username)).first()
         if user and check_password_hash(user.password_hash, password):
             if user.status == 'Suspended':
                 flash('Your account has been suspended.', 'error')
                 return redirect(url_for('login'))
                 
             session['user_id'] = user.id
+            user.last_login = datetime.utcnow()
             
             # Admin accounts bypass role selection
             if user.role == 'admin':
@@ -374,6 +790,7 @@ def login():
             db.session.commit()
             
             flash('Login successful!', 'success')
+            log_activity(user.id, "LOGIN", f"User logged in as {selected_role}")
             if selected_role == 'tutor':
                 return redirect(url_for('tutor_dashboard'))
             else:
@@ -384,22 +801,176 @@ def login():
 
 @app.route('/google_auth', methods=['POST'])
 def google_auth():
-    flash('Google Authentication requires Google Cloud API Keys. For now, please login or register using your standard student email!', 'warning')
-    return redirect(url_for('login'))
+    token = request.form.get('credential')
+    if not token:
+        flash('Missing Google credentials.', 'error')
+        return redirect(url_for('login'))
+        
+    try:
+        # Try with clock skew tolerance (google-auth >= 2.3.0)
+        try:
+            idinfo = id_token.verify_oauth2_token(
+                token, google_requests.Request(), GOOGLE_CLIENT_ID,
+                clock_skew_in_seconds=10
+            )
+        except TypeError:
+            # Fallback for older google-auth versions
+            idinfo = id_token.verify_oauth2_token(
+                token, google_requests.Request(), GOOGLE_CLIENT_ID
+            )
+        email = idinfo.get('email')
+        name  = idinfo.get('name', email.split('@')[0] if email else 'User')
+        
+        # Enforce EWU emails
+        if not (email.endswith('@std.ewubd.edu') or email.endswith('@ewubd.edu')):
+            flash('Only authorized EWU GSuite accounts (@std.ewubd.edu or @ewubd.edu) are allowed.', 'error')
+            return redirect(url_for('login'))
+            
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            # Auto-register as Learner
+            student_id = email.split('@')[0]
+            base_username = student_id
+            username = base_username
+            counter = 1
+            while User.query.filter_by(username=username).first():
+                username = f"{base_username}{counter}"
+                counter += 1
+                
+            # Create a secure random password for them
+            random_pw = ''.join(random.choices(string.ascii_letters + string.digits, k=16)) + 'A1@'
+            user = User(
+                name=name, username=username, email=email,
+                password_hash=generate_password_hash(random_pw),
+                role='learner',
+                studentId=student_id if email.endswith('@std.ewubd.edu') else 'Faculty',
+                department='Unknown',
+                status='Active'
+            )
+            user.is_verified = True
+            db.session.add(user)
+            db.session.flush()  # flush to get user.id without committing
+
+            # Create wallet with signup bonus
+            user_count = User.query.count()
+            bonus = 100.0 if user_count <= 5 else 0.0
+            wallet = Wallet(user_id=user.id, balance=bonus)
+            db.session.add(wallet)
+            if bonus > 0:
+                db.session.add(TransactionHistory(
+                    user_id=user.id, amount=bonus,
+                    type='Bonus', description='Sign-up Bonus'
+                ))
+            db.session.commit()
+
+            flash('Google Sign-Up successful! Welcome to StudyByte 🎉', 'success')
+            log_activity(user.id, "REGISTER", f"Google Sign-up: {user.name}")
+        else:
+            if user.status == 'Suspended':
+                flash('Your account has been suspended.', 'error')
+                return redirect(url_for('login'))
+            flash('Google Sign-In successful!', 'success')
+            log_activity(user.id, "LOGIN", "User logged in via Google")
+            
+        session['user_id'] = user.id
+        session['role'] = user.role
+        
+        if user.role == 'admin':
+            return redirect(url_for('admin_dashboard'))
+        elif user.role == 'tutor':
+            return redirect(url_for('tutor_dashboard'))
+        else:
+            return redirect(url_for('learner_dashboard'))
+
+    except ValueError as e:
+        flash(f'Google token error: {str(e)[:80]}. Please try again.', 'error')
+        return redirect(url_for('login'))
+    except Exception as e:
+        flash('Google Sign-In failed. Please try again or use email login.', 'error')
+        return redirect(url_for('login'))
 
 @app.route('/forgot_password', methods=['GET', 'POST'])
 def forgot_password():
     if request.method == 'POST':
-        email = request.form.get('email', '').strip()
-        user = User.query.filter_by(email=email).first()
-        if user:
-            # We don't have an email server, so we reset the password automatically and inform them
-            user.password_hash = generate_password_hash('123456')
-            db.session.commit()
-            flash('Your password has been successfully reset to: 123456. Please login and change it immediately from your profile settings.', 'success')
-            return redirect(url_for('login'))
-        else:
-            flash('No account found with that email address.', 'error')
+        if 'cancel' in request.form:
+            session.pop('reset_email', None)
+            session.pop('reset_code', None)
+            session.pop('reset_code_time', None)
+            return redirect(url_for('forgot_password'))
+
+        if 'email' in request.form:
+            email = request.form.get('email', '').strip()
+            # Must be valid EWU email
+            if not (email.endswith('@std.ewubd.edu') or email.endswith('@ewubd.edu')):
+                flash('Please use a valid EWU email address.', 'error')
+                return redirect(url_for('forgot_password'))
+                
+            user = User.query.filter_by(email=email).first()
+            if user:
+                code = ''.join(random.choices(string.digits, k=6))
+                session['reset_email'] = email
+                session['reset_code'] = code
+                session['reset_code_time'] = datetime.utcnow().timestamp()
+                # Send email using the reusable SMTP function
+                email_sent = send_verification_email(email, code)
+                
+                if email_sent:
+                    flash('Verification code sent securely to your university email.', 'success')
+                else:
+                    flash('Failed to deliver email. Check console or SMTP configuration.', 'warning')
+            else:
+                flash('No account found with that email address.', 'error')
+            return redirect(url_for('forgot_password'))
+            
+        elif 'code' in request.form:
+            code = request.form.get('code')
+            new_password = request.form.get('new_password')
+            confirm_password = request.form.get('confirm_password')
+            email = session.get('reset_email')
+            
+            if not email or session.get('reset_code') != code:
+                flash('Invalid verification code.', 'error')
+                return redirect(url_for('forgot_password'))
+                
+            # Check for expiration (10 minutes = 600 seconds)
+            reset_time = session.get('reset_code_time', 0)
+            if datetime.utcnow().timestamp() - reset_time > 600:
+                session.pop('reset_email', None)
+                session.pop('reset_code', None)
+                session.pop('reset_code_time', None)
+                flash('Verification code has expired. Please request a new one.', 'error')
+                return redirect(url_for('forgot_password'))
+                
+            if new_password != confirm_password:
+                flash('Passwords do not match.', 'error')
+                return redirect(url_for('forgot_password'))
+                
+            if not (6 <= len(new_password) <= 32):
+                flash('Password must be between 6 and 32 characters.', 'error')
+                return redirect(url_for('forgot_password'))
+            if not re.search(r'[a-z]', new_password) or not re.search(r'[A-Z]', new_password):
+                flash('Password must contain both uppercase and lowercase letters.', 'error')
+                return redirect(url_for('forgot_password'))
+            if not re.search(r'[0-9]', new_password):
+                flash('Password must contain at least one number.', 'error')
+                return redirect(url_for('forgot_password'))
+            if not re.search(r'[@#_]', new_password):
+                flash('Password must contain at least one special character (@, #, _).', 'error')
+                return redirect(url_for('forgot_password'))
+            if ' ' in new_password:
+                flash('Password cannot contain spaces.', 'error')
+                return redirect(url_for('forgot_password'))
+                
+            user = User.query.filter_by(email=email).first()
+            if user:
+                user.password_hash = generate_password_hash(new_password)
+                db.session.commit()
+                session.pop('reset_email', None)
+                session.pop('reset_code', None)
+                session.pop('reset_code_time', None)
+                flash('Your password has been securely updated. You can now login.', 'success')
+                return redirect(url_for('login'))
+                
     return render_template('forgot_password.html')
 
 @app.route('/change_password', methods=['POST'])
@@ -418,8 +989,20 @@ def change_password():
         flash('New passwords do not match!', 'error')
         return redirect(url_for('view_profile', user_id=user.id))
         
-    if len(new_pw) < 6:
-        flash('New password must be at least 6 characters long.', 'error')
+    if not (6 <= len(new_pw) <= 32):
+        flash('Password must be between 6 and 32 characters.', 'error')
+        return redirect(url_for('view_profile', user_id=user.id))
+    if not re.search(r'[a-z]', new_pw) or not re.search(r'[A-Z]', new_pw):
+        flash('Password must contain both uppercase and lowercase letters.', 'error')
+        return redirect(url_for('view_profile', user_id=user.id))
+    if not re.search(r'[0-9]', new_pw):
+        flash('Password must contain at least one number.', 'error')
+        return redirect(url_for('view_profile', user_id=user.id))
+    if not re.search(r'[@#_]', new_pw):
+        flash('Password must contain at least one special character (@, #, _).', 'error')
+        return redirect(url_for('view_profile', user_id=user.id))
+    if ' ' in new_pw:
+        flash('Password cannot contain spaces.', 'error')
         return redirect(url_for('view_profile', user_id=user.id))
         
     user.password_hash = generate_password_hash(new_pw)
@@ -449,6 +1032,9 @@ def read_notifications():
 
 @app.route('/logout')
 def logout():
+    user_id = session.get('user_id')
+    if user_id:
+        log_activity(user_id, "LOGOUT", "User logged out")
     session.clear()
     flash('Logged out successfully.', 'success')
     return redirect(url_for('index'))
@@ -533,10 +1119,36 @@ def dashboard():
 @login_required
 def learner_dashboard():
     user = User.query.get(session['user_id'])
+    
+    # Auto-expire pending sessions gracefully
+    for b in Booking.query.filter_by(learner_id=user.id, status='Pending').all():
+        try:
+            dt_obj = datetime.strptime(f"{b.slot.date} {b.slot.start_time}", "%Y-%m-%d %H:%M")
+            if dt_obj < datetime.now():
+                b.status = 'Expired'
+        except:
+            pass
+    db.session.commit()
+    
     upcoming = Booking.query.filter_by(learner_id=user.id).filter(Booking.status.in_(['Pending', 'Confirmed'])).all()
-    past = Booking.query.filter_by(learner_id=user.id).filter(Booking.status.in_(['Completed', 'Cancelled'])).all()
-    suggested = TopicListing.query.filter_by(is_advertised=True).join(User).filter(User.is_verified == True).limit(5).all()
-    return render_template('learner_dashboard.html', upcoming_bookings=upcoming, past_bookings=past, suggested_listings=suggested)
+    past = Booking.query.filter_by(learner_id=user.id).filter(Booking.status.in_(['Completed', 'Cancelled', 'Expired'])).all()
+    # Suggested: advertised, verified, has available slots — same filter as marketplace
+    active_tutor_ids = [
+        t[0] for t in db.session.query(AvailabilitySlot.tutor_id)
+        .filter_by(is_booked=False, is_frozen=False).distinct().all()
+    ]
+    suggested = (
+        TopicListing.query
+        .join(User)
+        .filter(
+            User.is_verified == True,
+            TopicListing.tutor_id.in_(active_tutor_ids),
+            TopicListing.is_advertised == True
+        )
+        .order_by(TopicListing.id.desc())
+        .limit(5).all()
+    )
+    return render_template('learner_dashboard.html', upcoming_bookings=upcoming, past_bookings=past, suggested_listings=suggested, user=user)
 
 @app.route('/tutor/dashboard')
 @login_required
@@ -544,12 +1156,22 @@ def tutor_dashboard():
     user = User.query.get(session['user_id'])
     listings = TopicListing.query.filter_by(tutor_id=user.id).all()
     
+    for l in listings:
+        for b in Booking.query.filter_by(listing_id=l.id, status='Pending').all():
+            try:
+                dt_obj = datetime.strptime(f"{b.slot.date} {b.slot.start_time}", "%Y-%m-%d %H:%M")
+                if dt_obj < datetime.now():
+                    b.status = 'Expired'
+            except:
+                pass
+    db.session.commit()
+    
     listing_ids = [l.id for l in listings]
     bookings = Booking.query.filter(Booking.listing_id.in_(listing_ids)).order_by(Booking.timestamp.desc()).all()
     
     escrow_total = sum([tx.amount for tx in EscrowTransaction.query.filter(EscrowTransaction.booking_id.in_([b.id for b in bookings]), EscrowTransaction.status == 'Held').all()])
     
-    return render_template('tutor_dashboard.html', listings=listings, bookings=bookings, escrow_balance=escrow_total)
+    return render_template('tutor_dashboard.html', listings=listings, bookings=bookings, escrow_balance=escrow_total, user=user)
 
 @app.route('/tutor/availability', methods=['GET', 'POST'])
 @login_required
@@ -628,6 +1250,62 @@ def admin_dashboard():
     active_courses = TopicListing.query.filter(TopicListing.tutor_id.in_(active_tutors_ids)).count()
     hidden_courses = total_listings - active_courses
 
+    payout_bdt = db.session.query(db.func.sum(WithdrawalRequest.bdt_amount)).filter(WithdrawalRequest.status.in_(['Approved', 'Completed', 'Sent'])).scalar() or 0.0
+    bonus_tokens = db.session.query(db.func.sum(db.func.abs(TransactionHistory.amount))).filter_by(type='Bonus').scalar() or 0.0
+    bonus_bdt = bonus_tokens * 0.50
+    total_expense_bdt = payout_bdt + bonus_bdt
+    
+    token_sell_bdt = db.session.query(db.func.sum(TokenPurchaseRequest.bdt_amount)).filter(TokenPurchaseRequest.status.in_(['Approved', 'Completed'])).scalar() or 0.0
+    ad_tokens = db.session.query(db.func.sum(db.func.abs(TransactionHistory.amount))).filter_by(type='Advertisement').scalar() or 0.0
+    ad_bdt = ad_tokens * 0.50
+    penalty_tokens = db.session.query(db.func.sum(db.func.abs(TransactionHistory.amount))).filter_by(type='Penalty').scalar() or 0.0
+    penalty_bdt = penalty_tokens * 0.50
+    comm_tokens = db.session.query(db.func.sum(db.func.abs(TransactionHistory.amount))).filter_by(type='Commission').scalar() or 0.0
+    platform_fee_bdt = comm_tokens * 0.50
+    
+    total_earning_bdt = token_sell_bdt + ad_bdt + platform_fee_bdt + penalty_bdt
+    net_profit = total_earning_bdt - total_expense_bdt
+
+    # 24h Stats logic
+    now = datetime.utcnow()
+    day_ago = now - timedelta(hours=24)
+    
+    p24h_sum = db.session.query(db.func.sum(TokenPurchaseRequest.bdt_amount)).filter(TokenPurchaseRequest.timestamp >= day_ago, TokenPurchaseRequest.status.in_(['Approved', 'Completed'])).scalar() or 0.0
+    b24h_tokens = db.session.query(db.func.sum(db.func.abs(TransactionHistory.amount))).filter(TransactionHistory.timestamp >= day_ago, TransactionHistory.type == 'Bonus').scalar() or 0.0
+    b24h_bdt = b24h_tokens * 0.50
+    w24h_bdt = db.session.query(db.func.sum(WithdrawalRequest.bdt_amount)).filter(WithdrawalRequest.timestamp >= day_ago, WithdrawalRequest.status.in_(['Approved', 'Completed', 'Sent'])).scalar() or 0.0
+    a24h_tokens = db.session.query(db.func.sum(db.func.abs(TransactionHistory.amount))).filter(TransactionHistory.timestamp >= day_ago, TransactionHistory.type == 'Advertisement').scalar() or 0.0
+    a24h_bdt = a24h_tokens * 0.50
+    fee24h_tokens = db.session.query(db.func.sum(db.func.abs(TransactionHistory.amount))).filter(TransactionHistory.timestamp >= day_ago, TransactionHistory.type == 'Commission').scalar() or 0.0
+    fee24h_bdt = fee24h_tokens * 0.50
+    pen24h_tokens = db.session.query(db.func.sum(db.func.abs(TransactionHistory.amount))).filter(TransactionHistory.timestamp >= day_ago, TransactionHistory.type == 'Penalty').scalar() or 0.0
+    pen24h_bdt = pen24h_tokens * 0.50
+    
+    earn24h = p24h_sum + a24h_bdt + fee24h_bdt + pen24h_bdt
+    exp24h = w24h_bdt + b24h_bdt
+    profit24h = earn24h - exp24h
+    
+    stats_24h = {
+        'token_sell': p24h_sum,
+        'bonus': b24h_bdt,
+        'withdrawals': w24h_bdt,
+        'ads': a24h_bdt,
+        'fees': fee24h_bdt,
+        'penalties': pen24h_bdt,
+        'earning': earn24h,
+        'expense': exp24h,
+        'profit': profit24h
+    }
+    
+    # Update explicitly for cards
+    sf = SystemFinance.query.first()
+    if sf:
+        sf.total_revenue = total_earning_bdt
+        sf.total_expenses = total_expense_bdt
+        sf.net_profit = net_profit
+        sf.last_updated = datetime.utcnow()
+        db.session.commit()
+
     stats = {
         'total_users': User.query.count(),
         'students': User.query.filter_by(role='learner').count(),
@@ -641,16 +1319,37 @@ def admin_dashboard():
         'tokens_spent': total_tokens_spent,
         'platform_fees': platform_fees_collected,
         'platform_profit': platform_fees_collected,
+        'token_sell_bdt': token_sell_bdt,
+        'ad_bdt': ad_bdt,
+        'platform_fee_bdt': platform_fee_bdt,
+        'penalty_bdt': penalty_bdt,
+        'bonus_bdt': bonus_bdt,
+        'payout_bdt': payout_bdt,
+        'total_expense': total_expense_bdt,
+        'net_profit': net_profit,
+        'gross_earning': total_earning_bdt
     }
     
-    pending_tutors = User.query.filter(User.grade_report != None, User.is_verified == False, User.rejection_reason == None).all()
-    recent_purchases = TokenPurchaseRequest.query.order_by(TokenPurchaseRequest.timestamp.desc()).limit(15).all()
-    withdrawals = WithdrawalRequest.query.filter_by(status='Pending').all()
-    disputes = EscrowTransaction.query.filter_by(status='Held').all()
+    all_tutors = User.query.filter_by(role='tutor').all()
+    purchases = TokenPurchaseRequest.query.order_by(TokenPurchaseRequest.timestamp.desc()).limit(50).all()
+    withdrawals = WithdrawalRequest.query.order_by(WithdrawalRequest.timestamp.desc()).all()
+    disputes = Dispute.query.filter_by(status='Open').all()
     all_users = User.query.all()
+    transactions = TransactionHistory.query.order_by(TransactionHistory.timestamp.desc()).limit(50).all()
+    support_tickets = SupportTicket.query.order_by(SupportTicket.status.desc(), SupportTicket.timestamp.desc()).all()
     
-    return render_template('admin_dashboard.html', stats=stats, pending_tutors=pending_tutors, 
-                           purchases=recent_purchases, withdrawals=withdrawals, disputes=disputes, users=all_users)
+    running_sessions = Booking.query.filter_by(status='Confirmed').all()
+    scheduled_sessions = Booking.query.filter_by(status='Pending').all()
+    past_sessions = Booking.query.filter(Booking.status.in_(['Completed', 'Cancelled'])).all()
+    
+    all_courses = TopicListing.query.all()
+    activities = ActivityLog.query.order_by(ActivityLog.timestamp.desc()).limit(50).all()
+    
+    sf = SystemFinance.query.first()
+    return render_template('admin_dashboard.html', stats=stats, all_tutors=all_tutors, stats_24h=stats_24h,
+                           purchases=purchases, withdrawals=withdrawals, disputes=disputes, users=all_users, transactions=transactions,
+                           running_sessions=running_sessions, scheduled_sessions=scheduled_sessions, past_sessions=past_sessions,
+                           all_courses=all_courses, activities=activities, sf=sf, support_tickets=support_tickets)
 
 @app.route('/api/admin/analytics', methods=['GET'])
 @login_required
@@ -777,6 +1476,7 @@ def marketplace():
     if cat:
         query = query.filter(TopicListing.category == cat)
     
+    # Only include listings from tutors with at least one available slot
     query = query.order_by(TopicListing.is_advertised.desc(), TopicListing.id.desc())
     listings = query.all()
     return render_template('marketplace.html', listings=listings)
@@ -793,25 +1493,35 @@ def view_listing(listing_id):
 @login_required
 def advertise_listing(listing_id):
     if session['role'] != 'tutor':
-        return "Unauthorized", 403
+        flash('Only tutors can purchase advertisements.', 'error')
+        return redirect(url_for('tutor_dashboard'))
     listing = TopicListing.query.get_or_404(listing_id)
     if listing.tutor_id != session['user_id']:
-        return "Unauthorized", 403
-        
-    wallet = Wallet.query.filter_by(user_id=session['user_id']).first()
-    cost = 40.0
-    if wallet.balance < cost:
-        flash('Insufficient tokens to advertise this course (40 Tokens required).', 'error')
+        flash('You can only advertise your own courses.', 'error')
         return redirect(url_for('tutor_dashboard'))
-        
+    if listing.is_advertised and listing.ad_expiry_time and listing.ad_expiry_time > datetime.utcnow():
+        flash('This course is already being advertised. Wait for it to expire.', 'warning')
+        return redirect(url_for('tutor_dashboard'))
+
+    wallet = Wallet.query.filter_by(user_id=session['user_id']).first()
+    cost = round(listing.price * 0.40, 2)  # 40% of listing price
+    if wallet.balance < cost:
+        flash(f'Insufficient tokens. You need {cost} tokens (40% of {listing.price}) to advertise.', 'error')
+        return redirect(url_for('tutor_dashboard'))
+
     wallet.balance -= cost
     listing.is_advertised = True
-    
-    hist = TransactionHistory(user_id=session['user_id'], amount=-cost, type='Advertisement', description=f"Paid for advertising course: {listing.title}")
+    listing.ad_expiry_time = datetime.utcnow() + timedelta(hours=24)
+
+    hist = TransactionHistory(
+        user_id=session['user_id'], amount=-cost,
+        type='Advertisement', description=f"Ad for '{listing.title}' (40% = {cost} tokens, 24hr)"
+    )
     db.session.add(hist)
+    update_system_finance(revenue=cost * 0.50)  # BDT equivalent
     db.session.commit()
-    
-    flash('Course successfully advertised!', 'success')
+
+    flash(f'Course advertised for 24 hours! Cost: {cost} tokens (40% of listing price).', 'success')
     return redirect(url_for('tutor_dashboard'))
 
 @app.route('/listing/create', methods=['GET', 'POST'])
@@ -846,6 +1556,12 @@ def create_listing():
         flash('Listing created successfully!', 'success')
         return redirect(url_for('tutor_dashboard'))
     return render_template('create_listing.html')
+
+# /purchase_ad now redirects to the unified advertise_listing route
+@app.route('/purchase_ad/<int:listing_id>', methods=['POST'])
+@login_required
+def purchase_ad(listing_id):
+    return advertise_listing(listing_id)
 
 @app.route('/book/<int:listing_id>', methods=['POST'])
 @login_required
@@ -911,49 +1627,87 @@ def confirm_booking(booking_id):
 @login_required
 def check_in_session(booking_id):
     booking = Booking.query.get_or_404(booking_id)
-    
+
     if session['user_id'] == booking.learner_id:
         if booking.learner_confirmed:
-            flash('You have already confirmed.', 'error')
-            return redirect(url_for('dashboard'))
+            flash('You have already confirmed this session.', 'error')
+            return redirect(url_for('chat_room', booking_id=booking_id))
         booking.learner_confirmed = True
+        booking.learner_join_time = datetime.utcnow()
         party = 'Learner'
+        other_id = booking.listing.tutor_id
+        other_label = 'Tutor'
     elif session['user_id'] == booking.listing.tutor_id:
         if booking.tutor_confirmed:
-            flash('You have already confirmed.', 'error')
-            return redirect(url_for('dashboard'))
+            flash('You have already confirmed this session.', 'error')
+            return redirect(url_for('chat_room', booking_id=booking_id))
         booking.tutor_confirmed = True
+        booking.tutor_join_time = datetime.utcnow()
         party = 'Tutor'
+        other_id = booking.learner_id
+        other_label = 'Learner'
     else:
         return "Unauthorized", 403
-        
-    db.session.commit()
 
+    # Notify the other party that this side confirmed
+    db.session.add(Notification(
+        user_id=other_id,
+        message=f"✅ The {party} has confirmed session BKG-{booking.id} ({booking.listing.title}). Please confirm your side to release payment.",
+        action_url=f"/booking/{booking.id}/chat"
+    ))
+
+    # ── Both sides confirmed → AUTO-DISPATCH PAYMENT ──────────────────────────
     if booking.learner_confirmed and booking.tutor_confirmed:
         booking.status = 'Completed'
-        escrow = EscrowTransaction.query.filter_by(booking_id=booking.id).first()
-        if escrow and escrow.status == 'Held':
+        escrow = EscrowTransaction.query.filter_by(booking_id=booking.id, status='Held').first()
+
+        if escrow:
+            platform_fee  = round(escrow.amount * 0.05, 2)
+            tutor_payout  = round(escrow.amount - platform_fee, 2)
             escrow.status = 'Released'
+
             tutor_wallet = Wallet.query.filter_by(user_id=booking.listing.tutor_id).first()
-            
-            # Platform Fee: 5% deduction
-            platform_fee = escrow.amount * 0.05
-            tutor_payout = escrow.amount - platform_fee
-            
-            tutor_wallet.balance += tutor_payout
-            
-            hist = TransactionHistory(user_id=booking.listing.tutor_id, amount=tutor_payout, type='Received', description=f"Escrow released: {booking.listing.title} (after 5% fee)")
-            db.session.add(hist)
-            
-            fee_hist = TransactionHistory(user_id=booking.listing.tutor_id, amount=platform_fee, type='Penalty', description=f"Platform Fee for {booking.listing.title}")
-            db.session.add(fee_hist)
-            
+            if tutor_wallet:
+                tutor_wallet.balance += tutor_payout
+
+            update_system_finance(revenue=platform_fee)
+            db.session.add(TransactionHistory(
+                user_id=booking.listing.tutor_id,
+                amount=tutor_payout,
+                type='Received',
+                description=f"Auto-released: {booking.listing.title} (BKG-{booking.id}, after 5% fee)"
+            ))
+            db.session.add(TransactionHistory(
+                user_id=booking.listing.tutor_id,
+                amount=platform_fee,
+                type='Commission',
+                description=f"Platform Fee 5% — BKG-{booking.id}"
+            ))
+
+            # Notify both parties of successful release
+            db.session.add(Notification(
+                user_id=booking.listing.tutor_id,
+                message=f"🎉 Payment auto-released! {tutor_payout} tokens received for '{booking.listing.title}' (BKG-{booking.id}).",
+                action_url='/wallet'
+            ))
+            db.session.add(Notification(
+                user_id=booking.learner_id,
+                message=f"✅ Session '{booking.listing.title}' (BKG-{booking.id}) completed & payment released. Leave a review!",
+                action_url=f"/booking/{booking.id}/review"
+            ))
+            released_amount = tutor_payout
+        else:
+            released_amount = 0
+
         db.session.commit()
-        flash('Both parties confirmed! Session Verified and Escrow automatically released.', 'success')
-    else:
-        flash(f'{party} check-in recorded. Waiting for the other party to check in.', 'success')
-        
-    return redirect(url_for('dashboard'))
+        flash(f'🎉 Both parties confirmed! Payment of {released_amount} tokens auto-released to tutor.', 'success')
+        return redirect(url_for('chat_room', booking_id=booking_id))
+
+    # ── Only one side confirmed ────────────────────────────────────────────────
+    db.session.commit()
+    flash(f'✅ {party} confirmed. Waiting for {other_label} to confirm. Payment will release automatically when both confirm.', 'success')
+    return redirect(url_for('chat_room', booking_id=booking_id))
+
 
 @app.route('/booking/<int:booking_id>/review', methods=['GET', 'POST'])
 @login_required
@@ -1030,16 +1784,6 @@ def simulate_pg():
     amount = request.args.get('amount')
     return render_template('payment_gateway.html', method=method, req_id=req_id, bdt_amount=amount)
 
-def verify_payment_api(method, payment_id):
-    """ Realistic Mock for Payment Gateway Execute & Verify API """
-    # Real logic: res = requests.post(f"https://checkout.{method.lower()}.com/api/v1/payment/execute", json={"paymentID": payment_id})
-    # data = res.json()
-    # return data.get('transactionStatus') == 'Completed', data.get('trxID')
-    
-    # Simulated successful transaction ID
-    import string, random
-    trx_id = f"TRX{method[:2].upper()}" + "".join(random.choices(string.digits + string.ascii_uppercase, k=8))
-    return True, trx_id
 
 @app.route('/payment/callback', methods=['POST'])
 @login_required
@@ -1056,36 +1800,16 @@ def payment_callback():
         return redirect(url_for('wallet'))
     
     if status == 'success':
-        if not account_no or not account_no.startswith('01') or len(account_no) != 11:
-            flash('Invalid account number provided. Transaction failed.', 'error')
+        transaction_id = request.form.get('transaction_id')
+        if not transaction_id:
+            flash('Transaction ID is required.', 'error')
             return redirect(url_for('wallet'))
             
-        if not pin or len(pin) < 4:
-            flash('Invalid PIN. Transaction failed.', 'error')
-            return redirect(url_for('wallet'))
-            
-        # 3. Verify Payment
-        # (In reality, we'd use a payment_id returned by the gateway, simulating it here)
-        is_valid, final_trx_id = verify_payment_api(req.method, f"temp_{req.id}")
+        req.status = 'Pending Verification'
+        req.transaction_id = transaction_id
+        db.session.commit()
         
-        if is_valid:
-            req.status = 'Approved'
-            req.transaction_id = final_trx_id
-            req.mobile_number = account_no
-            
-            # 4. Automatically Credit Tokens
-            wallet = Wallet.query.filter_by(user_id=req.user_id).first()
-            wallet.balance += req.token_amount
-            
-            hist = TransactionHistory(user_id=req.user_id, amount=req.token_amount, type='Purchase', description=f"Bought via {req.method} ({final_trx_id})")
-            db.session.add(hist)
-            db.session.commit()
-            
-            flash(f'Payment successful! {req.token_amount} tokens added automatically. TRX ID: {final_trx_id}', 'success')
-        else:
-            req.status = 'Failed'
-            db.session.commit()
-            flash('Payment verification failed.', 'error')
+        flash(f'Payment submitted successfully! Your tokens will be added once an admin verifies the Transaction ID: {transaction_id}', 'success')
     else:
         req.status = 'Cancelled'
         db.session.commit()
@@ -1098,6 +1822,11 @@ def payment_callback():
 def withdraw_funds():
     if session['role'] != 'tutor':
         flash('Only tutors can withdraw funds.', 'error')
+        return redirect(url_for('wallet'))
+        
+    user = User.query.get(session['user_id'])
+    if not user.is_verified:
+        flash('Unverified users cannot withdraw money or access tutor financial features.', 'error')
         return redirect(url_for('wallet'))
         
     token_amount = float(request.form['token_amount'])
@@ -1114,6 +1843,10 @@ def withdraw_funds():
 
     wallet = Wallet.query.filter_by(user_id=session['user_id']).first()
     
+    if token_amount < 1000:
+        flash('Minimum withdrawal is 500 BDT (1000 Tokens).', 'error')
+        return redirect(url_for('wallet'))
+        
     if token_amount > wallet.balance:
         flash('Insufficient token balance.', 'error')
         return redirect(url_for('wallet'))
@@ -1147,40 +1880,29 @@ def admin_withdraw(w_id, action):
         wallet.balance += req.token_amount
         hist = TransactionHistory(user_id=req.user_id, amount=req.token_amount, type='Refund', description='Withdrawal request rejected')
         db.session.add(hist)
-        flash('Withdrawal rejected. Tokens refunded to user.', 'success')
     db.session.commit()
     return redirect(url_for('admin_dashboard'))
 
-@app.route('/admin/dispute/<int:tx_id>', methods=['POST'])
+@app.route('/admin/purchase/<int:p_id>/<action>', methods=['POST'])
 @login_required
-def resolve_dispute(tx_id):
+def admin_purchase(p_id, action):
     if session['role'] != 'admin':
         return "Unauthorized", 403
-    
-    action = request.form.get('action')
-    tx = EscrowTransaction.query.get_or_404(tx_id)
-    booking = Booking.query.get(tx.booking_id)
-
-    if action == 'refund':
-        tx.status = 'Refunded'
-        booking.status = 'Cancelled'
-        wallet = Wallet.query.filter_by(user_id=booking.learner_id).first()
-        wallet.balance += tx.amount
-        hist = TransactionHistory(user_id=booking.learner_id, amount=tx.amount, type='Refund', description=f"Admin dispute won - refund for {booking.listing.title}")
+    req = TokenPurchaseRequest.query.get_or_404(p_id)
+    if action == 'approve':
+        req.status = 'Approved'
+        wallet = Wallet.query.filter_by(user_id=req.user_id).first()
+        wallet.balance += req.token_amount
+        hist = TransactionHistory(user_id=req.user_id, amount=req.token_amount, type='Purchase', description=f"Manual Buy {req.method} ({req.transaction_id})")
         db.session.add(hist)
-        flash('Dispute resolved: Transaction refunded to learner.', 'success')
-    
-    elif action == 'pay_tutor':
-        tx.status = 'Released'
-        booking.status = 'Completed'
-        tutor_wallet = Wallet.query.filter_by(user_id=booking.listing.tutor_id).first()
-        tutor_wallet.balance += tx.amount
-        hist = TransactionHistory(user_id=booking.listing.tutor_id, amount=tx.amount, type='Received', description=f"Admin dispute won - payment for {booking.listing.title}")
-        db.session.add(hist)
-        flash('Dispute resolved: Escrow forcefully cleared to Tutor.', 'success')
-        
+        flash('Purchase approved and tokens added.', 'success')
+    else:
+        req.status = 'Rejected'
+        flash('Purchase rejected.', 'error')
     db.session.commit()
     return redirect(url_for('admin_dashboard'))
+
+
 
 @app.route('/admin/user/<int:u_id>/toggle_suspend', methods=['POST'])
 @login_required
@@ -1196,6 +1918,72 @@ def toggle_suspend(u_id):
         u.status = 'Active'
         flash(f'User {u.name} activated.', 'success')
     db.session.commit()
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/user/<int:u_id>/set_password', methods=['POST'])
+@login_required
+def admin_set_password(u_id):
+    if session['role'] != 'admin':
+        return "Unauthorized", 403
+    u = User.query.get_or_404(u_id)
+    new_pw = request.form.get('new_password', '')
+
+    if not (6 <= len(new_pw) <= 32):
+        flash('Password must be between 6 and 32 characters.', 'error')
+        return redirect(url_for('admin_dashboard'))
+    if not re.search(r'[a-z]', new_pw) or not re.search(r'[A-Z]', new_pw):
+        flash('Password must contain both uppercase and lowercase letters.', 'error')
+        return redirect(url_for('admin_dashboard'))
+    if not re.search(r'[0-9]', new_pw):
+        flash('Password must contain at least one number.', 'error')
+        return redirect(url_for('admin_dashboard'))
+    if not re.search(r'[@#_]', new_pw):
+        flash('Password must contain at least one special character (@, #, _).', 'error')
+        return redirect(url_for('admin_dashboard'))
+    if ' ' in new_pw:
+        flash('Password cannot contain spaces.', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+    u.password_hash = generate_password_hash(new_pw)
+    db.session.commit()
+    log_activity(session['user_id'], 'ADMIN_SET_PW', f"Admin force-reset password for {u.name} (UID:{u.id})")
+    flash(f'Password for {u.name} has been updated successfully.', 'success')
+    return redirect(url_for('admin_dashboard'))
+
+
+@app.route('/support/new', methods=['GET', 'POST'])
+@login_required
+def report_support_ticket():
+    if request.method == 'POST':
+        subject = request.form.get('subject')
+        message = request.form.get('message')
+        if not subject or not message:
+            flash('Please fill out all fields.', 'error')
+            return redirect(url_for('report_support_ticket'))
+            
+        ticket = SupportTicket(user_id=session['user_id'], subject=subject, message=message)
+        db.session.add(ticket)
+        db.session.commit()
+        flash('Support ticket perfectly submitted. An admin will get back to you soon.', 'success')
+        return redirect(url_for('dashboard'))
+    return render_template('report_support.html')
+
+@app.route('/admin/support/<int:ticket_id>/reply', methods=['POST'])
+@login_required
+def admin_reply_support(ticket_id):
+    if session.get('role') != 'admin':
+        return "Unauthorized", 403
+    ticket = SupportTicket.query.get_or_404(ticket_id)
+    reply = request.form.get('admin_reply')
+    if reply:
+        ticket.admin_reply = reply
+        ticket.status = 'Closed'
+        
+        # Notify the user
+        notif = Notification(user_id=ticket.user_id, message=f"Admin replied to your ticket: {ticket.subject}", action_url='/dashboard')
+        db.session.add(notif)
+        db.session.commit()
+        flash('Support ticket replied to successfully!', 'success')
     return redirect(url_for('admin_dashboard'))
 
 def upload_to_cloud(file):
@@ -1260,6 +2048,9 @@ def cancel_booking(booking_id):
     if not (is_learner or is_tutor):
         return "Unauthorized", 403
         
+    wallet_learner = Wallet.query.filter_by(user_id=booking.learner_id).first()
+    wallet_tutor = Wallet.query.filter_by(user_id=booking.listing.tutor_id).first()
+    
     fee = 0.0
     refund_amount = booking.listing.price
     if booking.status == 'Confirmed':
@@ -1273,22 +2064,27 @@ def cancel_booking(booking_id):
         escrow.status = 'Refunded'
         
     booking.status = 'Cancelled'
-    
-    wallet_learner = Wallet.query.filter_by(user_id=booking.learner_id).first()
-    wallet_tutor = Wallet.query.filter_by(user_id=booking.listing.tutor_id).first()
-    
+
     if is_learner:
         wallet_learner.balance += refund_amount
-        wallet_tutor.balance += fee
         db.session.add(TransactionHistory(user_id=booking.learner_id, amount=refund_amount, type='Refund', description=f"Cancelled booking {booking.id} (-20% fee)"))
         if fee > 0:
-             db.session.add(TransactionHistory(user_id=booking.listing.tutor_id, amount=fee, type='Compensation', description=f"Learner cancelled booking {booking.id} fee"))
+            update_system_finance(revenue=fee)
     else:
-        wallet_learner.balance += booking.listing.price
-        db.session.add(TransactionHistory(user_id=booking.learner_id, amount=booking.listing.price, type='Refund', description=f"Tutor cancelled booking {booking.id}"))
-        if fee > 0:
-            wallet_tutor.balance -= fee
-            db.session.add(TransactionHistory(user_id=booking.listing.tutor_id, amount=-fee, type='Penalty', description=f"Cancellation penalty booking {booking.id}"))
+        # Tutor cancelled — 40% penalty: 20% to learner, 20% to system
+        price = booking.listing.price
+        penalty_total = price * 0.40
+        learner_comp   = price * 0.20
+        system_share   = price * 0.20
+        # Full refund + 20% compensation to learner
+        wallet_learner.balance += price + learner_comp
+        db.session.add(TransactionHistory(user_id=booking.learner_id, amount=price, type='Refund', description=f"Refund: tutor cancelled booking {booking.id}"))
+        db.session.add(TransactionHistory(user_id=booking.learner_id, amount=learner_comp, type='Compensation', description=f"Tutor cancellation compensation 20% (BKG-{booking.id})"))
+        # 40% penalty deducted from tutor
+        wallet_tutor.balance -= penalty_total
+        db.session.add(TransactionHistory(user_id=booking.listing.tutor_id, amount=-penalty_total, type='Penalty', description=f"Cancellation penalty 40% (BKG-{booking.id})"))
+        # 20% to platform
+        update_system_finance(revenue=system_share)
         
     db.session.commit()
     flash('Booking cancelled successfully.', 'success')
@@ -1298,8 +2094,15 @@ def cancel_booking(booking_id):
 @login_required
 def chat_room(booking_id):
     booking = Booking.query.get_or_404(booking_id)
-    if not (session['user_id'] == booking.learner_id or session['user_id'] == booking.listing.tutor_id):
+    if not (session['user_id'] == booking.learner_id or session['user_id'] == booking.listing.tutor_id or session.get('role') == 'admin'):
         return "Unauthorized", 403
+        
+    if session['user_id'] == booking.learner_id and not booking.learner_join_time:
+        booking.learner_join_time = datetime.utcnow()
+        db.session.commit()
+    elif session['user_id'] == booking.listing.tutor_id and not booking.tutor_join_time:
+        booking.tutor_join_time = datetime.utcnow()
+        db.session.commit()
     if booking.status != 'Confirmed' and booking.status != 'Completed':
         flash('Chat is only available for confirmed or completed bookings.', 'error')
         return redirect(url_for('dashboard'))
@@ -1352,6 +2155,31 @@ def download_material(mat_id):
 def on_join(data):
     room = str(data['room'])
     join_room(room)
+    sender_id = session.get('user_id')
+    booking = Booking.query.get(int(room))
+    if sender_id and booking:
+        now = datetime.utcnow()
+        if sender_id == booking.learner_id and not booking.learner_join_time:
+            booking.learner_join_time = now
+            db.session.commit()
+        elif sender_id == booking.listing.tutor_id and not booking.tutor_join_time:
+            booking.tutor_join_time = now
+            db.session.commit()
+
+@socketio.on('leave')
+def on_leave(data):
+    room = str(data['room'])
+    leave_room(room)
+    sender_id = session.get('user_id')
+    booking = Booking.query.get(int(room))
+    if sender_id and booking:
+        now = datetime.utcnow()
+        if sender_id == booking.learner_id:
+            booking.learner_left_time = now
+            db.session.commit()
+        elif sender_id == booking.listing.tutor_id:
+            booking.tutor_left_time = now
+            db.session.commit()
 
 @socketio.on('send_message')
 def handle_message(data):
@@ -1386,5 +2214,209 @@ def handle_message(data):
             'timestamp': msg.timestamp.strftime('%H:%M')
         }, room=room)
 
+@app.route('/dispute/<int:booking_id>', methods=['GET', 'POST'])
+@login_required
+def report_dispute(booking_id):
+    booking = Booking.query.get_or_404(booking_id)
+    if session['user_id'] not in [booking.learner_id, booking.listing.tutor_id]:
+        return "Unauthorized", 403
+
+    # Allow disputes for any active or recently-ended booking
+    allowed_statuses = ('Confirmed', 'Pending', 'Completed', 'Payment Under Review')
+    if booking.status not in allowed_statuses:
+        flash('Disputes cannot be filed for cancelled or expired bookings.', 'error')
+        return redirect(url_for('chat_room', booking_id=booking_id))
+
+    if request.method == 'POST':
+        reason   = request.form.get('reason', '').strip()
+        category = request.form.get('category', 'Other')
+
+        if not reason:
+            flash('Please describe the issue.', 'error')
+            return redirect(url_for('report_dispute', booking_id=booking_id))
+
+        # Check for existing open dispute from same user
+        existing = Dispute.query.filter_by(
+            booking_id=booking.id,
+            user_id=session['user_id'],
+            status='Open'
+        ).first()
+        if existing:
+            flash('You already have an open dispute for this booking. Admin is reviewing it.', 'warning')
+            return redirect(url_for('chat_room', booking_id=booking_id))
+
+        dispute = Dispute(
+            booking_id=booking.id,
+            user_id=session['user_id'],
+            reason=reason,
+            category=category
+        )
+        db.session.add(dispute)
+
+        # Mark booking as under review
+        booking.status = 'Payment Under Review'
+
+        # Notify admin
+        admin = User.query.filter_by(role='admin').first()
+        if admin:
+            db.session.add(Notification(
+                user_id=admin.id,
+                message=f"⚖️ New dispute [{category}] filed for BKG-{booking.id} — '{booking.listing.title}'. Action required.",
+                action_url='/admin/disputes'
+            ))
+
+        # Notify the other party
+        reporter   = User.query.get(session['user_id'])
+        other_id   = booking.listing.tutor_id if session['user_id'] == booking.learner_id else booking.learner_id
+        db.session.add(Notification(
+            user_id=other_id,
+            message=f"⚠️ {reporter.name} has filed a dispute for BKG-{booking.id} ({category}). Admin will review and contact both parties.",
+            action_url=f"/booking/{booking.id}/chat"
+        ))
+
+        db.session.commit()
+        flash('Dispute submitted. Admin will review and take action on the escrow.', 'success')
+        return redirect(url_for('chat_room', booking_id=booking_id))
+
+    return render_template('report_dispute.html', booking=booking)
+
+@app.route('/admin/disputes')
+@login_required
+def admin_disputes():
+    if session['role'] != 'admin':
+        return "Unauthorized", 403
+    disputes = Dispute.query.order_by(Dispute.status.desc(), Dispute.timestamp.desc()).all()
+    # Add System Finance to the context
+    sf = SystemFinance.query.first()
+    return render_template('admin_disputes.html', disputes=disputes, sf=sf)
+
+@app.route('/admin/resolve_dispute/<int:dispute_id>', methods=['POST'])
+@login_required
+def admin_resolve_dispute(dispute_id):
+    if session['role'] != 'admin':
+        return "Unauthorized", 403
+        
+    dispute = Dispute.query.get_or_404(dispute_id)
+    booking = dispute.booking
+    
+    action = request.form.get('action') # release, refund, split, penalty, close_only
+    admin_notes = request.form.get('admin_notes', '')
+    
+    dispute.admin_notes = admin_notes
+    dispute.status = 'Resolved'
+    
+    if action == 'close_only':
+        db.session.commit()
+        flash('Dispute strictly closed with no transaction side effects.', 'success')
+        return redirect(url_for('admin_dashboard'))
+    
+    escrow = EscrowTransaction.query.filter_by(booking_id=booking.id, status='Held').first()
+    if not escrow:
+        flash('Escrow missing or already resolved.', 'error')
+        return redirect(url_for('admin_dashboard'))
+        
+    learner_wallet = Wallet.query.filter_by(user_id=booking.learner_id).first()
+    tutor_wallet = Wallet.query.filter_by(user_id=booking.listing.tutor_id).first()
+    
+    if action == 'release':
+        platform_fee = escrow.amount * 0.05
+        tutor_payout = escrow.amount - platform_fee
+        tutor_wallet.balance += tutor_payout
+        update_system_finance(revenue=platform_fee)
+        db.session.add(TransactionHistory(user_id=tutor_wallet.user_id, amount=platform_fee, type='Commission', description=f"Platform Fee (BKG-{booking.id})"))
+        escrow.status = 'Released'
+        booking.status = 'Completed'
+        db.session.add(TransactionHistory(user_id=tutor_wallet.user_id, amount=tutor_payout, type='Received', description=f"Admin released Escrow (BKG-{booking.id})"))
+        
+    elif action == 'refund':
+        learner_wallet.balance += escrow.amount
+        escrow.status = 'Refunded'
+        booking.status = 'Cancelled'
+        db.session.add(TransactionHistory(user_id=learner_wallet.user_id, amount=escrow.amount, type='Refund', description=f"Admin refunded Escrow (BKG-{booking.id})"))
+        
+    elif action == 'split':
+        half = escrow.amount / 2
+        learner_wallet.balance += half
+        tutor_wallet.balance += half
+        escrow.status = 'Split'
+        booking.status = 'Completed'
+        db.session.add(TransactionHistory(user_id=learner_wallet.user_id, amount=half, type='Refund', description=f"Admin Split Refund (BKG-{booking.id})"))
+        db.session.add(TransactionHistory(user_id=tutor_wallet.user_id, amount=half, type='Received', description=f"Admin Split Payout (BKG-{booking.id})"))
+        
+    elif action == 'penalty':
+        # 40% penalty from tutor: 20% to learner, 20% to system
+        price = escrow.amount
+        penalty_total = price * 0.40
+        learner_comp  = price * 0.20
+        system_share  = price * 0.20
+        # Full refund + 20% comp to learner
+        learner_wallet.balance += price + learner_comp
+        db.session.add(TransactionHistory(user_id=learner_wallet.user_id, amount=price, type='Refund', description=f"Admin dispute refund (BKG-{booking.id})"))
+        db.session.add(TransactionHistory(user_id=learner_wallet.user_id, amount=learner_comp, type='Compensation', description=f"Admin penalty compensation 20% (BKG-{booking.id})"))
+        # 40% deducted from tutor
+        tutor_wallet.balance -= penalty_total
+        db.session.add(TransactionHistory(user_id=tutor_wallet.user_id, amount=-penalty_total, type='Penalty', description=f"Admin penalty 40% (BKG-{booking.id})"))
+        # 20% to platform
+        update_system_finance(revenue=system_share)
+        escrow.status = 'Refunded'
+        booking.status = 'Cancelled'
+        
+    log_activity(session['user_id'], 'ADMIN_DISPUTE', f"Resolved dispute #{dispute.id} with action: {action}")
+    db.session.commit()
+    flash(f'Dispute resolved with action: {action}', 'success')
+    return redirect(url_for('admin_disputes'))
+
+# ── Admin: Force-Close a Session ─────────────────────────────────────────────
+@app.route('/admin/booking/<int:booking_id>/force_close', methods=['POST'])
+@login_required
+def force_close_session(booking_id):
+    """Admin can forcefully close any active (Confirmed or Pending) session.
+    - Refunds learner from escrow if held.
+    - Notifies both parties.
+    - Logs admin action.
+    """
+    if session['role'] != 'admin':
+        return "Unauthorized", 403
+
+    booking = Booking.query.get_or_404(booking_id)
+    if booking.status not in ('Confirmed', 'Pending'):
+        flash('Session is already resolved or completed.', 'error')
+        return redirect(url_for('admin_sessions'))
+
+    reason = request.form.get('reason', 'Admin intervention').strip() or 'Admin intervention'
+
+    escrow = EscrowTransaction.query.filter_by(booking_id=booking.id, status='Held').first()
+    if escrow:
+        learner_wallet = Wallet.query.filter_by(user_id=booking.learner_id).first()
+        if learner_wallet:
+            learner_wallet.balance += escrow.amount
+            db.session.add(TransactionHistory(
+                user_id=booking.learner_id,
+                amount=escrow.amount,
+                type='Refund',
+                description=f"Admin force-closed session BKG-{booking.id}: {reason}"
+            ))
+        escrow.status = 'Refunded'
+
+    booking.status = 'Cancelled'
+
+    # Notify both parties
+    db.session.add(Notification(
+        user_id=booking.learner_id,
+        message=f"⚠️ Your session BKG-{booking.id} was force-closed by an admin. Reason: {reason}. Your payment has been refunded.",
+        action_url='/learner/dashboard'
+    ))
+    db.session.add(Notification(
+        user_id=booking.listing.tutor_id,
+        message=f"⚠️ Your session BKG-{booking.id} was force-closed by an admin. Reason: {reason}.",
+        action_url='/tutor/dashboard'
+    ))
+
+    log_activity(session['user_id'], 'ADMIN_FORCE_CLOSE', f"Force-closed BKG-{booking.id}. Reason: {reason}")
+    db.session.commit()
+    flash(f'Session BKG-{booking.id} has been force-closed. Learner refunded.', 'success')
+    return redirect(url_for('admin_sessions'))
+
 if __name__ == '__main__':
-    socketio.run(app, debug=True, port=5000, allow_unsafe_werkzeug=True)
+    debug_mode = os.environ.get('FLASK_ENV') != 'production'
+    socketio.run(app, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=debug_mode)

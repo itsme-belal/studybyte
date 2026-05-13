@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Virtual Environment
+venv/
+env/
+.venv/
+
+# Flask / SQLite local database
+instance/
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploads (local dev only)
+uploads/
+
+# Environment Secrets — NEVER commit these
+.env
+*.env
+
+# IDE
+.vscode/
+.idea/
+
+# Vercel (replaced by Render)
+.vercel/
+vercel.json

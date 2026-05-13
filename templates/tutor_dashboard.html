@@ -1,20 +1,25 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="flex justify-between items-center mb-4">
-    <h2 class="text-teal">Tutor Dashboard</h2>
-    <div class="flex gap-2">
-        <a href="{{ url_for('manage_availability') }}" class="btn btn-outline">📅 Manage Availability</a>
-        <a href="{{ url_for('create_listing') }}" class="btn btn-primary">+ New Topic</a>
+    <div class="card bg-surface mb-4">
+        <div class="flex justify-between items-center">
+            <div>
+                <h2>Welcome, <span class="text-teal">{{ user.name }}</span>!</h2>
+                <p class="text-muted">Role: {{ user.role|title }} | Rating: ⭐ {{ "%.1f"|format(user.rating) }}</p>
+            </div>
+            <div class="flex flex-col gap-2">
+                <a href="{{ url_for('create_listing') }}" class="btn btn-primary text-sm shadow">Create New Course</a>
+                <a href="{{ url_for('report_support_ticket') }}" class="btn btn-outline" style="font-size: 0.8rem; border-style: dashed;">Get Admin Support</a>
+            </div>
+        </div>
     </div>
-</div>
 
 {% if not current_user.is_verified %}
-<div class="alert alert-warning mb-4" style="background-color: rgba(245, 158, 11, 0.1); border: 1px solid var(--warning); color: var(--warning);">
-    <strong>Account Action:</strong> Your tutor account is pending admin verification. You will be notified once approved. 
-    {% if current_user.rejection_reason %}
-    <br><br><span class="text-danger">Last rejection reason: {{ current_user.rejection_reason }}</span>
-    {% endif %}
+<div class="mb-6 p-4 rounded-xl" style="background-color: var(--warning-light, #fff3cd); border-left: 4px solid var(--warning); color: #856404;">
+    <div class="flex justify-between items-center">
+        <span>👉 <strong>Verify your email to unlock bonuses and rewards</strong></span>
+        <a href="{{ url_for('send_verification') }}" class="btn btn-warning btn-sm">Verify Now</a>
+    </div>
 </div>
 {% endif %}
 
@@ -34,12 +39,25 @@
                 <span>{{ l.title }}</span>
                 <div class="flex gap-2 items-center">
                     <strong>{{ l.price }} 🪙</strong>
+                    
+                    <a href="{{ url_for('edit_listing', listing_id=l.id) }}" class="btn btn-sm btn-outline text-xs" style="padding: 2px 4px;">✏️ Edit</a>
+                    
+                    <form method="POST" action="{{ url_for('delete_listing', listing_id=l.id) }}" style="display:inline;" onsubmit="return confirm('Archive/Delete this course listing?');">
+                        <button type="submit" class="btn btn-sm btn-outline border-danger text-danger text-xs" style="padding: 2px 4px;">🗑️ Delete</button>
+                    </form>
+
                     {% if not l.is_advertised %}
-                    <form method="POST" action="{{ url_for('advertise_listing', listing_id=l.id) }}" style="display:inline;" onsubmit="return confirm('Advertise this course for 40 Tokens?');">
-                        <button class="btn btn-sm btn-outline text-xs text-warning border-warning" style="padding: 2px 4px;">Advertise (40🪙)</button>
+                    <form method="POST" action="{{ url_for('purchase_ad', listing_id=l.id) }}" style="display:inline;"
+                        onsubmit="return confirm('Advertise &quot;{{ l.title }}&quot; for {{ (l.price * 0.40)|round(2) }} tokens (40% of {{ l.price }} 🪙)?')">
+                        <button class="btn btn-sm btn-outline text-xs text-warning border-warning" style="padding: 2px 4px;" title="Cost: {{ (l.price * 0.40)|round(2) }} tokens = 40% of listing price">
+                            ⭐ Advertise ({{ (l.price * 0.40)|round(2) }}🪙)
+                        </button>
                     </form>
                     {% else %}
-                    <span class="text-xs text-success border border-success px-1 rounded" style="padding: 2px 4px;">Advertised ✔️</span>
+                    <div class="flex flex-col text-right">
+                        <span class="text-xs text-success border border-success px-1 rounded" style="padding: 2px 4px;">Advertised ✔️</span>
+                        <span class="text-xs text-muted" style="font-size: 0.65rem;">Exp: {{ l.ad_expiry_time.strftime('%b %d %H:%M') if l.ad_expiry_time else '' }}</span>
+                    </div>
                     {% endif %}
                 </div>
             </div>
@@ -79,11 +97,11 @@
                 {% elif b.status == 'Confirmed' %}
                     <div class="flex flex-col gap-1">
                         <a href="{{ url_for('chat_room', booking_id=b.id) }}" class="btn btn-sm btn-secondary w-full text-center" style="font-size: 0.75rem;">💬 Chat / Meet</a>
-                        {% if b.tutor_checked_in %}
-                        <span class="text-success text-xs text-center block mt-1">Checked In. Waiting...</span>
+                        {% if b.tutor_confirmed %}
+                        <span class="text-success text-xs text-center block mt-1">✔ You confirmed. Waiting for learner...</span>
                         {% else %}
                         <form method="POST" action="{{ url_for('check_in_session', booking_id=b.id) }}">
-                            <button class="btn btn-sm py-1 w-full text-black" style="background-color: var(--warning); border:none; font-size: 0.75rem; color: #000;">✅ Check-In Student</button>
+                            <button class="btn btn-sm py-1 w-full text-black" style="background-color: var(--warning); border:none; font-size: 0.75rem; color: #000;">✅ Confirm Session</button>
                         </form>
                         {% endif %}
                         <form method="POST" action="{{ url_for('cancel_booking', booking_id=b.id) }}" onsubmit="return confirm('Cancel confirmed booking? You will pay a 20% penalty fee.');">
@@ -93,11 +111,42 @@
                 {% elif b.status == 'Completed' %}
                     <a href="{{ url_for('chat_room', booking_id=b.id) }}" class="btn btn-sm btn-secondary w-full text-center" style="font-size: 0.75rem;">View Chat/Notes</a>
                 {% endif %}
+                
+                {% if b.status == 'Payment Under Review' or b.status == 'Completed' or b.status == 'Cancelled' %}
+                <form action="{{ url_for('report_dispute', booking_id=b.id) }}" class="mt-1">
+                    <button class="btn btn-sm btn-outline border-danger text-danger py-1 w-full" style="font-size: 0.7rem;">Report Issue</button>
+                </form>
+                {% endif %}
             </td>
         </tr>
         {% else %}
         <tr><td colspan="5" class="py-4 text-muted text-center">No bookings.</td></tr>
         {% endfor %}
     </table>
+</div>
+
+<div class="card mt-8 mb-4">
+    <h3>My Support Tickets</h3>
+    <div class="mt-4">
+        {% for t in user.support_tickets|sort(attribute='timestamp', reverse=True) %}
+        <div class="border-bottom pb-2 mb-3 bg-black/10 p-3 rounded" style="background-color: var(--bg-dark);">
+            <div class="flex justify-between">
+                <strong class="text-teal">{{ t.subject }}</strong>
+                <span class="status status-{{ t.status|lower }}">{{ t.status }}</span>
+            </div>
+            <p class="text-[10px] text-muted">{{ t.timestamp.strftime('%Y-%m-%d %H:%M') }}</p>
+            <p class="text-sm mt-1">{{ t.message }}</p>
+            
+            {% if t.admin_reply %}
+            <div class="mt-2 p-2 rounded text-sm border-l-4" style="background-color: rgba(13, 148, 136, 0.1); border-color: var(--accent-teal);">
+                <strong class="text-xs uppercase tracking-widest text-teal">Admin Reply:</strong><br>
+                {{ t.admin_reply }}
+            </div>
+            {% endif %}
+        </div>
+        {% else %}
+        <p class="text-muted text-sm border-dashed border p-4 text-center rounded border-[var(--border-color)]">No support tickets opened.</p>
+        {% endfor %}
+    </div>
 </div>
 {% endblock %}

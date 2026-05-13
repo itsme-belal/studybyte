@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Request Dispute — BKG-{{ booking.id }}{% endblock %}
+
+{% block content %}
+<style>
+.dispute-card {
+    max-width:560px;margin:0 auto;
+    background:linear-gradient(145deg,rgba(10,18,40,0.9),rgba(5,10,23,0.95));
+    border:1px solid rgba(239,68,68,0.2);border-radius:1.5rem;padding:2rem;
+    box-shadow:0 25px 60px rgba(0,0,0,0.5),0 0 0 1px rgba(239,68,68,0.05);
+    backdrop-filter:blur(30px);position:relative;overflow:hidden;
+}
+.dispute-card::before {
+    content:'';position:absolute;top:0;left:0;right:0;height:2px;
+    background:linear-gradient(90deg,transparent,#ef4444,#f59e0b,transparent);
+}
+.d-label {
+    display:block;font-size:0.72rem;font-weight:700;letter-spacing:0.08em;
+    text-transform:uppercase;color:#64748b;margin-bottom:0.4rem;
+}
+.d-input {
+    width:100%;padding:0.7rem 1rem;
+    background:rgba(5,10,23,0.8)!important;
+    border:1px solid rgba(148,163,184,0.12)!important;
+    border-radius:0.6rem;color:#e2e8f0!important;
+    font-size:0.875rem;font-family:inherit;
+    transition:all 0.2s ease;
+}
+.d-input:focus {
+    outline:none!important;
+    border-color:rgba(239,68,68,0.5)!important;
+    box-shadow:0 0 0 3px rgba(239,68,68,0.08)!important;
+}
+.info-banner {
+    padding:0.85rem 1rem;border-radius:0.75rem;margin-bottom:1.25rem;
+    background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.2);
+    font-size:0.8rem;line-height:1.6;color:#94a3b8;
+    display:flex;gap:10px;align-items:flex-start;
+}
+[data-theme="light"] .dispute-card {
+    background:linear-gradient(145deg,rgba(255,245,245,0.95),rgba(255,255,255,0.9));
+    border-color:rgba(239,68,68,0.3);
+}
+[data-theme="light"] .d-input {
+    background:rgba(248,250,252,0.9)!important;
+    color:#0f172a!important;
+    border-color:rgba(15,23,42,0.15)!important;
+}
+</style>
+
+<div class="dispute-card">
+    <!-- Header -->
+    <div style="text-align:center;margin-bottom:1.5rem;">
+        <div style="width:52px;height:52px;border-radius:50%;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);
+            display:flex;align-items:center;justify-content:center;margin:0 auto 0.75rem;font-size:1.4rem;">⚖️</div>
+        <h2 style="font-size:1.2rem;font-weight:800;color:#f8fafc;margin-bottom:4px;">Request Dispute / Unfreeze</h2>
+        <p style="font-size:0.78rem;color:#64748b;">
+            BKG-{{ booking.id }} &nbsp;·&nbsp;
+            <span style="color:#00d4aa;">{{ booking.listing.title }}</span>
+        </p>
+    </div>
+
+    <!-- Info Banner -->
+    <div class="info-banner">
+        <span style="font-size:1rem;flex-shrink:0;">💡</span>
+        <div>
+            If the session ended but payment is frozen, or if there was an issue, submit a dispute.
+            <strong style="color:#f59e0b;">Admin will review and take action on the escrow.</strong>
+            If both parties confirm the session was completed, payment is released automatically — no dispute needed.
+        </div>
+    </div>
+
+    <!-- Form -->
+    <form method="POST" action="{{ url_for('report_dispute', booking_id=booking.id) }}">
+        <!-- Category -->
+        <div style="margin-bottom:1.1rem;">
+            <label class="d-label">Dispute Category</label>
+            <select name="category" class="d-input" required>
+                <option value="" disabled selected>— Select the issue type —</option>
+                <optgroup label="🔒 Payment / Escrow">
+                    <option value="Request Unfreeze">💰 Request payment unfreeze (session ended, no auto-release)</option>
+                    <option value="Payment Stuck">🔄 Payment stuck in escrow after both confirmed</option>
+                </optgroup>
+                <optgroup label="❌ No Show / Misconduct">
+                    <option value="Tutor No Show">🚫 Tutor did not show up for the session</option>
+                    <option value="Learner No Show">🚫 Learner did not show up for the session</option>
+                    <option value="Session Cancelled Unfairly">❌ Session was cancelled unfairly</option>
+                </optgroup>
+                <optgroup label="📉 Quality / Content">
+                    <option value="Unsatisfactory Session">📉 Session was incomplete or unsatisfactory</option>
+                    <option value="Wrong Content">⚠️ Tutor taught different content than advertised</option>
+                </optgroup>
+                <optgroup label="Other">
+                    <option value="Other">📝 Other</option>
+                </optgroup>
+            </select>
+        </div>
+
+        <!-- Description -->
+        <div style="margin-bottom:1.25rem;">
+            <label class="d-label">Describe the Issue</label>
+            <textarea name="reason" class="d-input" rows="5" required
+                placeholder="Please describe what happened in detail. The more information you provide, the faster admin can act…"
+                style="resize:vertical;"></textarea>
+        </div>
+
+        <!-- Session info summary -->
+        <div style="margin-bottom:1.25rem;padding:0.75rem;border-radius:0.65rem;
+            background:rgba(0,212,170,0.04);border:1px solid rgba(0,212,170,0.1);font-size:0.75rem;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem;">
+                <div><span style="color:#64748b;">Session Date:</span> <span style="color:#e2e8f0;">{{ booking.slot.date if booking.slot else '—' }}</span></div>
+                <div><span style="color:#64748b;">Time:</span> <span style="color:#e2e8f0;">{{ booking.slot.start_time if booking.slot else '—' }}–{{ booking.slot.end_time if booking.slot else '' }}</span></div>
+                <div><span style="color:#64748b;">Tutor Confirmed:</span>
+                    <span style="color:{% if booking.tutor_confirmed %}#00d4aa{% else %}#f87171{% endif %};">
+                        {% if booking.tutor_confirmed %}✔ Yes{% else %}✗ No{% endif %}
+                    </span>
+                </div>
+                <div><span style="color:#64748b;">Learner Confirmed:</span>
+                    <span style="color:{% if booking.learner_confirmed %}#00d4aa{% else %}#f87171{% endif %};">
+                        {% if booking.learner_confirmed %}✔ Yes{% else %}✗ No{% endif %}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+            <a href="{{ url_for('chat_room', booking_id=booking.id) }}" class="btn btn-outline"
+                style="flex:1;min-width:120px;text-align:center;padding:0.65rem;">← Back to Chat</a>
+            <button type="submit" class="btn" style="flex:1;min-width:140px;padding:0.65rem;
+                background:linear-gradient(135deg,#ef4444,#dc2626);border:none;color:white;
+                border-radius:0.6rem;font-weight:700;cursor:pointer;font-size:0.85rem;">
+                ⚖️ Submit Dispute
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

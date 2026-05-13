@@ -1,7 +1,24 @@
-Flask==3.0.0
+# StudyByte Production Requirements
+# Render + Supabase PostgreSQL + eventlet WebSockets
+
+# Core Framework
+Flask==3.0.3
+Werkzeug==3.0.3
 Flask-SQLAlchemy==3.1.1
-Werkzeug==3.0.1
+
+# WebSockets (eventlet is required for Render + Flask-SocketIO)
 Flask-SocketIO==5.3.6
+eventlet==0.36.1
+
+# Database Drivers
+psycopg2-binary==2.9.9   # PostgreSQL driver for Supabase
+
+# HTTP & Auth
 requests==2.31.0
-psycopg2-binary==2.9.9
-gunicorn==21.2.0
+google-auth==2.29.0
+
+# Production WSGI Server
+gunicorn==22.0.0
+
+# Environment Variables
+python-dotenv==1.0.1

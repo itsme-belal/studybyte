@@ -1,0 +1,24 @@
+# render.yaml — Render Infrastructure as Code
+# This file auto-configures your Render service when you connect your GitHub repo.
+
+services:
+  - type: web
+    name: studybyte
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -k eventlet -w 1 --bind 0.0.0.0:$PORT wsgi:application
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true        # Render auto-generates a secure random value
+      - key: DATABASE_URL
+        sync: false                # You paste this manually from Supabase
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASS
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: CORS_ORIGINS
+        value: "*"
