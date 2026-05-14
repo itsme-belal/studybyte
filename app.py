@@ -344,8 +344,8 @@ def send_verification_email(to_email, code):
         body = f"Your verification code is: {code}"
         msg.attach(MIMEText(body, 'plain'))
         
-        # Use Port 465 for SSL (More reliable on Render)
-        server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
         server.login(email_user, email_pass)
         server.send_message(msg)
         server.quit()
