@@ -325,33 +325,48 @@ def log_activity(user_id, action_type, description):
 
 def send_verification_email(to_email, code):
     """
-    Sends a 6-digit verification code to any student email using Gmail SSL.
-    Uses Port 465 to bypass Render network restrictions.
+    Sends a 6-digit verification code via Brevo (Sendinblue) REST API.
+    Uses HTTPS — no SMTP ports needed, works on Render free tier.
+    Can send to ANY email address without domain verification.
+    Requires BREVO_API_KEY and EMAIL_USER environment variables.
     """
-    email_user = os.environ.get('EMAIL_USER')
-    email_pass = os.environ.get('EMAIL_PASS')
-    
-    if not email_user or not email_pass:
-        print("WARNING: EMAIL_USER or EMAIL_PASS not set.")
+    api_key = os.environ.get('BREVO_API_KEY')
+    sender_email = os.environ.get('EMAIL_USER', 'noreply@studybyte.com')
+
+    if not api_key:
+        print("WARNING: BREVO_API_KEY not set. Email not sent.")
         return False
-        
+
     try:
-        msg = MIMEMultipart()
-        msg['From'] = email_user
-        msg['To'] = to_email
-        msg['Subject'] = "StudyByte Password Reset Code"
-        
-        body = f"Your verification code is: {code}"
-        msg.attach(MIMEText(body, 'plain'))
-        
-        # Use SMTP_SSL on Port 465 (Works on Render)
-        server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
-        server.login(email_user, email_pass)
-        server.send_message(msg)
-        server.quit()
-        return True
+        import requests as _req
+        response = _req.post(
+            'https://api.brevo.com/v3/smtp/email',
+            headers={
+                'api-key': api_key,
+                'Content-Type': 'application/json'
+            },
+            json={
+                'sender': {'name': 'StudyByte', 'email': sender_email},
+                'to': [{'email': to_email}],
+                'subject': 'StudyByte Password Reset Code',
+                'textContent': (
+                    f'Hello,\n\n'
+                    f'Your StudyByte password reset code is:\n\n'
+                    f'  {code}\n\n'
+                    f'This code expires in 10 minutes.\n\n'
+                    f'If you did not request this, please ignore this email.\n\n'
+                    f'— The StudyByte Team'
+                )
+            },
+            timeout=10
+        )
+        if response.status_code in (200, 201):
+            return True
+        else:
+            print(f"Brevo API Error: {response.status_code} {response.text}")
+            return False
     except Exception as e:
-        print(f"Gmail SMTP Error: {e}")
+        print(f"Brevo Email Error: {e}")
         return False
 
 @app.context_processor
