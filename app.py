@@ -271,8 +271,9 @@ def initialize_database():
             admin_password = os.environ.get('ADMIN_PASSWORD')
             admin_name     = os.environ.get('ADMIN_NAME', 'Platform Admin')
 
-            if not User.query.filter_by(role='admin').first():
-                if admin_email and admin_password:
+            if admin_email and admin_password:
+                admin = User.query.filter_by(role='admin').first()
+                if not admin:
                     admin = User(
                         name=admin_name,
                         email=admin_email,
@@ -282,8 +283,16 @@ def initialize_database():
                         is_verified=True
                     )
                     db.session.add(admin)
-                    db.session.commit()
+                    print(f"Admin account created: {admin_email}")
                 else:
+                    # Sync existing admin with environment variables
+                    admin.email = admin_email
+                    admin.name = admin_name
+                    admin.password_hash = generate_password_hash(admin_password)
+                    print(f"Admin account synced with environment variables: {admin_email}")
+                db.session.commit()
+            else:
+                if not User.query.filter_by(role='admin').first():
                     print("WARNING: No admin account exists. Set ADMIN_EMAIL and ADMIN_PASSWORD env vars to auto-create one.")
             _db_initialized = True
         except Exception as e:
