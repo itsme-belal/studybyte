@@ -657,13 +657,17 @@ def register():
         
         log_activity(user.id, "REGISTER", f"New user registered: {user.name} ({user.role})")
         
-        session['user_id'] = user.id
-        session['role'] = user.role
-        
-        flash('Registration successful! Please verify your email from the dashboard to unlock bonuses.', 'success')
-        if user.role == 'tutor':
-            return redirect(url_for('tutor_dashboard'))
-        return redirect(url_for('learner_dashboard'))
+        # ---- MANDATORY VERIFICATION: Send code immediately, do NOT grant session yet ----
+        code = ''.join(random.choices(string.digits, k=6))
+        session['pending_user_id'] = user.id
+        session['signup_email'] = user.email
+        session['signup_code'] = code
+        email_sent = send_verification_email(user.email, code)
+        if email_sent:
+            flash('Registration successful! A verification code has been sent to your university email. Please verify to access the platform.', 'success')
+        else:
+            flash('Registration successful but we could not send the verification email. Please contact support.', 'warning')
+        return redirect(url_for('verify_signup'))
         
     return render_template('register.html')
 
@@ -687,8 +691,6 @@ def verify_signup():
     email = session.get('signup_email')
     if not email:
         flash('Session expired. Please request a new code.', 'error')
-        if 'user_id' in session:
-            return redirect(url_for('learner_dashboard'))
         return redirect(url_for('login'))
         
     if request.method == 'POST':
@@ -699,7 +701,6 @@ def verify_signup():
             
         user = User.query.filter_by(email=email).first()
         if user:
-            already_verified = user.is_verified
             user.is_verified = True
             db.session.commit()
             
@@ -708,14 +709,13 @@ def verify_signup():
             
             # Bonus logic (only if they haven't received one yet)
             user_count = User.query.filter(User.is_verified == True).count()
-            bonus = 100.0 if user_count <= 5 else 30.0 # Small bonus for all verify
+            bonus = 100.0 if user_count <= 5 else 30.0
             
             wallet = Wallet.query.filter_by(user_id=user.id).first()
             if not wallet:
                 wallet = Wallet(user_id=user.id, balance=0)
                 db.session.add(wallet)
             
-            # Only give bonus if one hasn't been claimed before
             actual_bonus_given = 0
             if bonus > 0 and not existing_bonus:
                 wallet.balance += bonus
@@ -725,18 +725,24 @@ def verify_signup():
             
             db.session.commit()
             
+            # Clear pending session keys and grant full access
             session.pop('signup_email', None)
             session.pop('signup_code', None)
+            pending_id = session.pop('pending_user_id', None)
+            
+            # Grant session (whether they came from registration or login)
+            session['user_id'] = user.id
+            session['role'] = user.role
             
             log_activity(user.id, "VERIFY", f"User {user.email} verified.")
             
             if actual_bonus_given > 0:
-                flash(f'Account verified! {actual_bonus_given} token bonus added to your wallet.', 'success')
+                flash(f'Email verified! Welcome to StudyByte 🎉 {actual_bonus_given} token bonus added to your wallet.', 'success')
             else:
-                flash('Account verified successfully!', 'success')
+                flash('Email verified! Welcome to StudyByte 🎉', 'success')
             
-            if 'user_id' not in session:
-                return redirect(url_for('login'))
+            if user.role == 'tutor':
+                return redirect(url_for('tutor_dashboard'))
             return redirect(url_for('learner_dashboard'))
             
     return render_template('verify_signup.html', email=email)
@@ -797,6 +803,16 @@ def login():
             if user.status == 'Suspended':
                 flash('Your account has been suspended.', 'error')
                 return redirect(url_for('login'))
+            
+            # ---- BLOCK unverified users: send code and redirect to verify ----
+            if not user.is_verified and user.role != 'admin':
+                code = ''.join(random.choices(string.digits, k=6))
+                session['pending_user_id'] = user.id
+                session['signup_email'] = user.email
+                session['signup_code'] = code
+                send_verification_email(user.email, code)
+                flash('Your account is not verified yet. A new verification code has been sent to your email.', 'warning')
+                return redirect(url_for('verify_signup'))
                 
             session['user_id'] = user.id
             user.last_login = datetime.utcnow()

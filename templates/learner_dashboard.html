@@ -6,14 +6,7 @@
     <a href="{{ url_for('report_support_ticket') }}" class="btn btn-outline text-sm" style="border-style: dashed;">📞 Get Admin Support</a>
 </div>
 
-{% if not current_user.is_verified %}
-<div class="mb-6 p-4 rounded-xl" style="background-color: var(--warning-light, #fff3cd); border-left: 4px solid var(--warning); color: #856404;">
-    <div class="flex justify-between items-center">
-        <span>👉 <strong>Verify your email to unlock bonuses and rewards</strong></span>
-        <a href="{{ url_for('send_verification') }}" class="btn btn-warning btn-sm">Verify Now</a>
-    </div>
-</div>
-{% endif %}
+
 
 {% if suggested_listings %}
 <div class="mb-8">
