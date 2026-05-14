@@ -23,5 +23,3 @@ gunicorn==22.0.0
 # Environment Variables
 python-dotenv==1.0.1
 
-# Email API (replaces SMTP which is blocked on Render free tier)
-resend==2.4.0
