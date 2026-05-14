@@ -77,6 +77,7 @@ class User(db.Model):
     status = db.Column(db.String(20), default='Active')
     
     is_verified = db.Column(db.Boolean, default=False)
+    is_tutor_verified = db.Column(db.Boolean, default=False)
     grade_report = db.Column(db.String(255), nullable=True)
     rejection_reason = db.Column(db.Text, nullable=True)
     created_date = db.Column(db.DateTime, default=datetime.utcnow)
@@ -632,6 +633,7 @@ def register():
         # BUG FIX #1: Strict unverified nature for all new bounds.
         # Learners default to false, ensuring a swap later blocks them properly.
         user.is_verified = False
+        user.is_tutor_verified = False
         
         if role == 'tutor':
             if 'grade_report' not in request.files:
@@ -1134,7 +1136,7 @@ def tutor_apply():
         file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
         
         user.grade_report = filename
-        user.is_verified = False
+        user.is_tutor_verified = False
         user.role = 'tutor'
         session['role'] = 'tutor'
         db.session.commit()
@@ -1463,7 +1465,8 @@ def verify_tutor(tutor_id):
     tutor = User.query.get_or_404(tutor_id)
     action = request.form.get('action')
     if action == 'approve':
-        tutor.is_verified = True
+        tutor.is_tutor_verified = True
+        tutor.is_verified = True  # Approving tutor also verifies their identity
         tutor.rejection_reason = None
         flash(f'Tutor {tutor.name} approved.', 'success')
     elif action == 'reject':
@@ -1476,7 +1479,7 @@ def verify_tutor(tutor_id):
 def tutor_search():
     check_and_freeze_slots()
     q = request.args.get('q', '')
-    query = User.query.filter_by(role='tutor', is_verified=True)
+    query = User.query.filter_by(role='tutor', is_tutor_verified=True)
     if q:
         query = query.filter(User.name.contains(q) | User.skills.contains(q) | User.department.contains(q))
     tutors = query.all()

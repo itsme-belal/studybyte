@@ -365,9 +365,9 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {% for t in all_tutors %}
                     <div class="glass-panel p-5 relative overflow-hidden flex flex-col justify-between">
-                        {% if not t.is_verified and t.rejection_reason == None %}
+                        {% if not t.is_tutor_verified and t.rejection_reason == None %}
                             <div class="absolute top-2 right-2 border border-yellow-500 text-yellow-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-yellow-500/10">Pending Analysis</div>
-                        {% elif t.is_verified %}
+                        {% elif t.is_tutor_verified %}
                             <div class="absolute top-2 right-2 border border-neon-primary text-neon-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-[var(--primary)] text-opacity-80" style="background-color: rgba(0,255,136,0.1);">Protocol Valid</div>
                         {% else %}
                             <div class="absolute top-2 right-2 border border-red-500 text-red-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-red-500/10">Rejected</div>
@@ -393,7 +393,7 @@
                             </div>
                         </div>
 
-                        {% if not t.is_verified and t.rejection_reason == None %}
+                        {% if not t.is_tutor_verified and t.rejection_reason == None %}
                         <div class="mt-4 pt-4 border-t border-[var(--border-color)] flex gap-2">
                             <form action="{{ url_for('verify_tutor', tutor_id=t.id) }}" method="POST" class="flex-1">
                                 <button type="submit" name="action" value="approve" class="w-full py-1.5 bg-[var(--primary)] text-[#0b0f19] font-bold uppercase text-xs rounded hover:opacity-80 transition" style="background-color: var(--primary)">Verify</button>
