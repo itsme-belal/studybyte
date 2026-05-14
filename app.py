@@ -259,6 +259,7 @@ _db_initialized = False
 
 @app.before_request
 def initialize_database():
+    # Database wiped manually by admin; recreating on next request.
     global _db_initialized
     if not _db_initialized:
         try:
