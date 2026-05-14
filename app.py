@@ -297,7 +297,8 @@ def initialize_database():
                     print("WARNING: No admin account exists. Set ADMIN_EMAIL and ADMIN_PASSWORD env vars to auto-create one.")
             _db_initialized = True
         except Exception as e:
-            print(f"CRITICAL DATABASE ERROR: {e}")
+            db.session.rollback()
+            print(f"CRITICAL DATABASE ERROR during initialization: {e}")
             _db_initialized = True  # Prevent infinite retry loops that drain database connections
 
 # ----------------- UTILS -----------------
