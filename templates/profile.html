@@ -36,7 +36,12 @@
         {% if user.role != 'admin' %}
         <div class="form-group">
             <label class="form-label">Department</label>
-            <input type="text" name="department" class="form-control" value="{{ user.department or '' }}" placeholder="E.g., CSE">
+            <select name="department" class="form-control">
+                <option value="">— Select Department —</option>
+                {% for dept in departments %}
+                <option value="{{ dept }}" {% if user.department == dept %}selected{% endif %}>{{ dept }}</option>
+                {% endfor %}
+            </select>
         </div>
         {% endif %}
         

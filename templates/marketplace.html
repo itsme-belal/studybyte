@@ -142,10 +142,9 @@
         <input type="text" name="q" placeholder="🔍 Search topics..." value="{{ request.args.get('q', '') }}">
         <select name="category">
             <option value="">All Categories</option>
-            <option value="Computer Science" {% if request.args.get('category') == 'Computer Science' %}selected{% endif %}>Computer Science</option>
-            <option value="Mathematics"      {% if request.args.get('category') == 'Mathematics' %}selected{% endif %}>Mathematics</option>
-            <option value="Physics"          {% if request.args.get('category') == 'Physics' %}selected{% endif %}>Physics</option>
-            <option value="Business"         {% if request.args.get('category') == 'Business' %}selected{% endif %}>Business</option>
+            {% for cat in categories %}
+            <option value="{{ cat }}" {% if request.args.get('category') == cat %}selected{% endif %}>{{ cat }}</option>
+            {% endfor %}
         </select>
         <button type="submit" class="btn btn-primary" style="padding:0.55rem 1.1rem;">Search</button>
     </form>

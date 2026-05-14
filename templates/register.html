@@ -69,20 +69,9 @@
                 <label class="form-label">Department</label>
                 <select name="department" class="form-control" required>
                     <option value="" disabled selected>— Select your department —</option>
-                    <option value="B. Sc. in CSE">B. Sc. in CSE</option>
-                    <option value="B. Sc. in ICE">B. Sc. in ICE</option>
-                    <option value="B. Sc. in EEE">B. Sc. in EEE</option>
-                    <option value="B. Sc. in Data Science and Analytics">B. Sc. in Data Science and Analytics</option>
-                    <option value="B. Sc. in GEB">B. Sc. in GEB</option>
-                    <option value="B. Sc. in Civil Engineering">B. Sc. in Civil Engineering</option>
-                    <option value="B. Sc. (Hons.) in Mathematics">B. Sc. (Hons.) in Mathematics</option>
-                    <option value="B. Pharm.">B. Pharm.</option>
-                    <option value="BBA">BBA</option>
-                    <option value="BSS in Economics">BSS in Economics</option>
-                    <option value="BSS in Sociology">BSS in Sociology</option>
-                    <option value="BSS in Information Studies">BSS in Information Studies</option>
-                    <option value="BA in English">BA in English</option>
-                    <option value="LL.B (Hon's)">LL.B (Hon's)</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept }}">{{ dept }}</option>
+                    {% endfor %}
                 </select>
             </div>
             
@@ -97,7 +86,7 @@
 
             <div class="form-group" id="grade-report-group" style="display: none; background-color: var(--bg-dark); padding: 1rem; border-radius: 0.5rem; border: 1px solid var(--border);">
                 <label class="form-label text-warning mb-2">Tutor Verification (Required)</label>
-                <p class="text-xs text-muted mb-2">To become a tutor, please upload your official university Grade Report (PDF format only).</p>
+                <p class="text-xs text-muted mb-2">To become a tutor, please upload your official university Grade Report (PDF format only, Max 1MB).</p>
                 <input type="file" name="grade_report" id="grade_report" class="form-control" accept="application/pdf">
             </div>
             

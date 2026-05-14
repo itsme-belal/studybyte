@@ -61,6 +61,13 @@ socketio = SocketIO(
     engineio_logger=False,
 )
 
+DEPARTMENTS = [
+    'B. Sc. in ICE', 'B. Sc. in CSE', 'B. Sc. in EEE', 'B. Pharm.',
+    'B. Sc. in GEB', 'B.Sc. in Civil Engineering', 'B.Sc. (Hons.) in Mathematics',
+    'B.Sc. in Data Science and Analytics', 'BBA', 'BSS in Economics',
+    'BA in English', 'BSS in Sociology', 'BSS in Information Studies', 'LL.B (Hon’s)'
+]
+
 # ----------------- MODELS -----------------
 
 class User(db.Model):
@@ -622,6 +629,10 @@ def register():
             flash('The part of the email before @ must match your Student ID exactly.', 'error')
             return redirect(url_for('register'))
 
+        if department not in DEPARTMENTS:
+            flash('Invalid Department selected.', 'error')
+            return redirect(url_for('register'))
+
         if User.query.filter_by(email=email).first():
             flash('Email already registered.', 'error')
             return redirect(url_for('register'))
@@ -652,6 +663,15 @@ def register():
             if file.filename == '' or not file.filename.lower().endswith('.pdf'):
                 flash('Please upload a valid PDF grade report.', 'error')
                 return redirect(url_for('register'))
+            
+            # 1MB limit for grade report
+            file.seek(0, os.SEEK_END)
+            size = file.tell()
+            file.seek(0)
+            if size > 1 * 1024 * 1024:
+                flash('Grade report must be under 1MB.', 'error')
+                return redirect(url_for('register'))
+
             filename = secure_filename(f"{student_id}_{file.filename}")
             file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
             user.grade_report = filename
@@ -678,7 +698,7 @@ def register():
             flash('Registration successful but we could not send the verification email. Please contact support.', 'warning')
         return redirect(url_for('verify_signup'))
         
-    return render_template('register.html')
+    return render_template('register.html', departments=DEPARTMENTS)
 
 @app.route('/send_verification')
 @login_required
@@ -756,50 +776,6 @@ def verify_signup():
             
     return render_template('verify_signup.html', email=email)
 
-@app.route('/tutor/listing/<int:listing_id>/edit', methods=['GET', 'POST'])
-@login_required
-def edit_listing(listing_id):
-    if session['role'] != 'tutor':
-        return redirect(url_for('index'))
-    listing = TopicListing.query.get_or_404(listing_id)
-    if listing.tutor_id != session['user_id']:
-        return "Unauthorized", 403
-        
-    categories = ['Computer Science', 'Mathematics', 'Physics', 'Business', 'Languages', 'Arts']
-    if request.method == 'POST':
-        listing.title = request.form['title']
-        listing.description = request.form['description']
-        listing.price = float(request.form['price'])
-        listing.category = request.form['category']
-        listing.updated_at = datetime.utcnow()
-        
-        db.session.commit()
-        flash('Your listing was successfully updated!', 'success')
-        return redirect(url_for('tutor_dashboard'))
-        
-    avail_slots = AvailabilitySlot.query.filter_by(
-        tutor_id=listing.tutor_id, is_booked=False, is_frozen=False
-    ).order_by(AvailabilitySlot.date, AvailabilitySlot.start_time).all()
-    return render_template('edit_listing.html', listing=listing, categories=categories, avail_slots=avail_slots)
-
-@app.route('/tutor/listing/<int:listing_id>/delete', methods=['POST'])
-@login_required
-def delete_listing(listing_id):
-    if session['role'] != 'tutor':
-        return "Unauthorized", 403
-    listing = TopicListing.query.get_or_404(listing_id)
-    if listing.tutor_id != session['user_id']:
-        return "Unauthorized", 403
-        
-    active = Booking.query.filter_by(listing_id=listing.id).filter(Booking.status.in_(['Pending', 'Confirmed'])).first()
-    if active:
-        flash('Cannot delete listing with active bookings. Cancel them first.', 'error')
-        return redirect(url_for('tutor_dashboard'))
-        
-    db.session.delete(listing)
-    db.session.commit()
-    flash('Course listing has been deleted.', 'success')
-    return redirect(url_for('tutor_dashboard'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -1157,6 +1133,14 @@ def tutor_apply():
             flash('Please upload a valid PDF grade report.', 'error')
             return redirect(url_for('tutor_apply'))
             
+        # 1MB limit for grade report
+        file.seek(0, os.SEEK_END)
+        size = file.tell()
+        file.seek(0)
+        if size > 1 * 1024 * 1024:
+            flash('Grade report must be under 1MB.', 'error')
+            return redirect(url_for('tutor_apply'))
+
         filename = secure_filename(f"{user.studentId}_{file.filename}")
         file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
         
@@ -1545,7 +1529,7 @@ def marketplace():
     # Only include listings from tutors with at least one available slot
     query = query.order_by(TopicListing.is_advertised.desc(), TopicListing.id.desc())
     listings = query.all()
-    return render_template('marketplace.html', listings=listings)
+    return render_template('marketplace.html', listings=listings, categories=DEPARTMENTS)
 
 @app.route('/listing/<int:listing_id>')
 @login_required
@@ -1599,9 +1583,9 @@ def create_listing():
     
     user = User.query.get(session['user_id'])
     # ----------------------------
-    # BUG FIX #1: Direct verification and grade existence guard
-    if not user.is_verified or not user.grade_report:
-        flash('Your account must be securely verified by an admin before configuring dynamic listings.', 'error')
+    # REQUIREMENT: Only admin-verified tutors can create listings
+    if not user.is_tutor_verified:
+        flash('Your account must be verified by an admin before you can list courses.', 'error')
         return redirect(url_for('tutor_dashboard'))
     # ----------------------------
         
@@ -1621,7 +1605,56 @@ def create_listing():
         db.session.commit()
         flash('Listing created successfully!', 'success')
         return redirect(url_for('tutor_dashboard'))
-    return render_template('create_listing.html')
+    return render_template('create_listing.html', categories=DEPARTMENTS)
+
+@app.route('/listing/<int:listing_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_listing(listing_id):
+    if session['role'] != 'tutor':
+        flash('Unauthorized access.', 'error')
+        return redirect(url_for('index'))
+    listing = TopicListing.query.get_or_404(listing_id)
+    if listing.tutor_id != session['user_id']:
+        return "Unauthorized", 403
+        
+    if request.method == 'POST':
+        listing.title = request.form['title']
+        listing.description = request.form['description']
+        listing.price = float(request.form['price'])
+        category = request.form['category']
+        if category not in DEPARTMENTS:
+            flash('Invalid Department selected.', 'error')
+            return redirect(url_for('edit_listing', listing_id=listing_id))
+        listing.category = category
+        listing.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        flash('Listing updated successfully!', 'success')
+        return redirect(url_for('tutor_dashboard'))
+        
+    avail_slots = AvailabilitySlot.query.filter_by(
+        tutor_id=listing.tutor_id, is_booked=False, is_frozen=False
+    ).order_by(AvailabilitySlot.date, AvailabilitySlot.start_time).all()
+    return render_template('edit_listing.html', listing=listing, categories=DEPARTMENTS, avail_slots=avail_slots)
+
+@app.route('/listing/<int:listing_id>/delete', methods=['POST'])
+@login_required
+def delete_listing(listing_id):
+    if session['role'] != 'tutor':
+        return "Unauthorized", 403
+    listing = TopicListing.query.get_or_404(listing_id)
+    if listing.tutor_id != session['user_id']:
+        return "Unauthorized", 403
+        
+    active = Booking.query.filter_by(listing_id=listing.id).filter(Booking.status.in_(['Pending', 'Confirmed'])).first()
+    if active:
+        flash('Cannot delete listing with active bookings.', 'error')
+        return redirect(url_for('tutor_dashboard'))
+        
+    db.session.delete(listing)
+    db.session.commit()
+    flash('Listing deleted successfully.', 'success')
+    return redirect(url_for('tutor_dashboard'))
 
 # /purchase_ad now redirects to the unified advertise_listing route
 @app.route('/purchase_ad/<int:listing_id>', methods=['POST'])
@@ -2079,7 +2112,11 @@ def profile():
         user.education = request.form.get('education', '')
         
         if user.role != 'admin':
-            user.department = request.form.get('department', '')
+            dept = request.form.get('department', '')
+            if dept and dept not in DEPARTMENTS:
+                flash('Invalid Department selected.', 'error')
+                return redirect(url_for('profile'))
+            user.department = dept
             
         if 'profile_pic' in request.files:
             file = request.files['profile_pic']
@@ -2094,7 +2131,7 @@ def profile():
         db.session.commit()
         flash('Profile updated.', 'success')
         return redirect(url_for('profile'))
-    return render_template('profile.html', user=user)
+    return render_template('profile.html', user=user, departments=DEPARTMENTS)
 
 # --- NEW MODULES ADDED ---
 
@@ -2196,6 +2233,14 @@ def upload_material(booking_id):
         return redirect(url_for('chat_room', booking_id=booking_id))
         
     if file:
+        # 10MB limit check
+        file.seek(0, os.SEEK_END)
+        size = file.tell()
+        file.seek(0)
+        if size > 10 * 1024 * 1024:
+            flash('File size exceeds 10MB limit.', 'error')
+            return redirect(url_for('chat_room', booking_id=booking_id))
+
         original_name = file.filename
         filename = secure_filename(f"mat_{booking.id}_{uuid.uuid4().hex[:6]}_{original_name}")
         file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))

@@ -13,7 +13,7 @@
 
         <form method="POST" action="{{ url_for('tutor_apply') }}" enctype="multipart/form-data">
             <div class="form-group mb-4">
-                <label class="form-label" style="font-weight: 600;">Upload Grade Report (PDF Only)</label>
+                <label class="form-label" style="font-weight: 600;">Upload Grade Report (PDF Only, Max 1MB)</label>
                 <div class="mt-2" style="background-color: var(--bg-dark); padding: 1.5rem; border-radius: 0.5rem; border: 1px dashed var(--border); text-align: center;">
                     <input type="file" name="grade_report" accept="application/pdf" class="form-control" style="background: transparent; border: none;" required>
                 </div>

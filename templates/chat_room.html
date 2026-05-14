@@ -428,7 +428,7 @@
 
             {% if session.user_id == booking.listing.tutor_id %}
             <div style="border-top:1px solid var(--border);padding-top:1rem;">
-                <p style="font-size:0.7rem;color:#64748b;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:0.6rem;">Upload Material</p>
+                <p style="font-size:0.7rem;color:#64748b;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:0.6rem;">Upload Material (Max 10MB)</p>
                 <form action="{{ url_for('upload_material', booking_id=booking.id) }}" method="POST" enctype="multipart/form-data">
                     <input type="file" name="material" class="form-control" required style="font-size:0.78rem;padding:5px;margin-bottom:0.5rem;">
                     <button type="submit" class="btn btn-outline" style="width:100%;font-size:0.78rem;padding:0.4rem;">Upload File</button>

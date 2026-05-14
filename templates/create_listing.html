@@ -18,12 +18,10 @@
             <div class="form-group mb-4">
                 <label class="form-label">Category / Department</label>
                 <select name="category" class="form-control" required>
-                    <option value="Computer Science">Computer Science</option>
-                    <option value="Mathematics">Mathematics</option>
-                    <option value="Physics">Physics</option>
-                    <option value="Business">Business</option>
-                    <option value="Engineering">Engineering</option>
-                    <option value="Liberal Arts">Liberal Arts</option>
+                    <option value="" disabled selected>— Select Category —</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat }}">{{ cat }}</option>
+                    {% endfor %}
                 </select>
             </div>
             <div class="form-group mb-4">
