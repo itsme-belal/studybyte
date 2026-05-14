@@ -15,9 +15,8 @@ from werkzeug.utils import secure_filename
 from flask_sqlalchemy import SQLAlchemy
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from datetime import datetime, timedelta
-import random, string, re, uuid, smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import random, string, re, uuid
+import resend
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 
@@ -325,33 +324,34 @@ def log_activity(user_id, action_type, description):
 
 def send_verification_email(to_email, code):
     """
-    Sends a 6-digit verification code to the specified email using Gmail SMTP.
-    Requires EMAIL_USER and EMAIL_PASS environment variables.
+    Sends a 6-digit verification code via Resend API.
+    Requires RESEND_API_KEY environment variable.
     """
-    email_user = os.environ.get('EMAIL_USER')
-    email_pass = os.environ.get('EMAIL_PASS')
-    
-    if not email_user or not email_pass:
-        print("WARNING: EMAIL_USER or EMAIL_PASS not set. Email not sent.")
+    api_key = os.environ.get('RESEND_API_KEY')
+    if not api_key:
+        print("WARNING: RESEND_API_KEY not set. Email not sent.")
         return False
-        
+
     try:
-        msg = MIMEMultipart()
-        msg['From'] = email_user
-        msg['To'] = to_email
-        msg['Subject'] = "StudyByte Password Reset Code"
-        
-        body = f"Your verification code is: {code}"
-        msg.attach(MIMEText(body, 'plain'))
-        
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(email_user, email_pass)
-        server.send_message(msg)
-        server.quit()
+        resend.api_key = api_key
+        params = {
+            "from": "StudyByte <onboarding@resend.dev>",
+            "to": [to_email],
+            "subject": "StudyByte Password Reset Code",
+            "text": f"""Hello,
+
+Your StudyByte password reset code is:
+
+  {code}
+
+This code expires in 10 minutes. If you did not request this, please ignore this email.
+
+— The StudyByte Team"""
+        }
+        resend.Emails.send(params)
         return True
     except Exception as e:
-        print(f"SMTP Error: {e}")
+        print(f"Resend Email Error: {e}")
         return False
 
 @app.context_processor
