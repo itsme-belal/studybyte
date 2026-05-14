@@ -687,10 +687,14 @@ def verify_signup():
             
         user = User.query.filter_by(email=email).first()
         if user:
+            already_verified = user.is_verified
             user.is_verified = True
             db.session.commit()
             
-            # Bonus
+            # Check if ANY bonus already exists for this user to prevent double-claiming
+            existing_bonus = TransactionHistory.query.filter_by(user_id=user.id, type='Bonus').first()
+            
+            # Bonus logic (only if they haven't received one yet)
             user_count = User.query.filter(User.is_verified == True).count()
             bonus = 100.0 if user_count <= 5 else 30.0 # Small bonus for all verify
             
@@ -699,10 +703,13 @@ def verify_signup():
                 wallet = Wallet(user_id=user.id, balance=0)
                 db.session.add(wallet)
             
-            if bonus > 0:
+            # Only give bonus if one hasn't been claimed before
+            actual_bonus_given = 0
+            if bonus > 0 and not existing_bonus:
                 wallet.balance += bonus
                 bonus_history = TransactionHistory(user_id=user.id, amount=bonus, type='Bonus', description='Email Verification Bonus')
                 db.session.add(bonus_history)
+                actual_bonus_given = int(bonus)
             
             db.session.commit()
             
@@ -711,8 +718,8 @@ def verify_signup():
             
             log_activity(user.id, "VERIFY", f"User {user.email} verified.")
             
-            if bonus > 0:
-                flash(f'Account verified! {int(bonus)} token bonus added to your wallet.', 'success')
+            if actual_bonus_given > 0:
+                flash(f'Account verified! {actual_bonus_given} token bonus added to your wallet.', 'success')
             else:
                 flash('Account verified successfully!', 'success')
             
@@ -884,6 +891,12 @@ def google_auth():
             if user.status == 'Suspended':
                 flash('Your account has been suspended.', 'error')
                 return redirect(url_for('login'))
+            
+            # Ensure they are marked as verified if they log in via Google
+            if not user.is_verified:
+                user.is_verified = True
+                db.session.commit()
+            
             flash('Google Sign-In successful!', 'success')
             log_activity(user.id, "LOGIN", "User logged in via Google")
             
