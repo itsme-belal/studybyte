@@ -387,7 +387,10 @@ def inject_user():
     notifications = []
     if 'user_id' in session:
         user = User.query.get(session['user_id'])
-        if user:
+        if not user:
+            # Stale session (e.g. DB was wiped) — clear it silently
+            session.clear()
+        else:
             wallet = Wallet.query.filter_by(user_id=user.id).first()
             # Retroactive fix: Create wallet if missing (especially for Google Auth users)
             if not wallet and user.role != 'admin':
@@ -407,7 +410,12 @@ def login_required(f):
             flash('Please log in first.', 'error')
             return redirect(url_for('login'))
         user = User.query.get(session['user_id'])
-        if user and user.status == 'Suspended':
+        if not user:
+            # User was deleted (e.g. DB wipe) — clear stale session
+            session.clear()
+            flash('Your session has expired. Please log in again.', 'error')
+            return redirect(url_for('login'))
+        if user.status == 'Suspended':
             session.clear()
             flash('Your account is suspended. Please contact support.', 'error')
             return redirect(url_for('index'))
