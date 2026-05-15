@@ -36,48 +36,48 @@
 }
 
 [data-theme="light"] {
-    --bg-dark:          #f8fafc;
-    --bg-surface:       #ffffff;
-    --bg-surface-hover: #f1f5f9;
-    --text-main:        #0f172a;
+    --bg-dark:          #cbd5e1; /* Darker slate */
+    --bg-surface:       #f1f5f9; /* Soft greyish white */
+    --bg-surface-hover: #94a3b8;
+    --text-main:        #1e293b;
     --text-muted:       #475569;
     --text-heading:     #0f172a;
-    --border:           rgba(15, 23, 42, 0.08);
-    --border-glow:      rgba(0, 212, 170, 0.2);
+    --border:           rgba(15, 23, 42, 0.2);
+    --border-glow:      rgba(0, 212, 170, 0.5);
     --input-bg:         #ffffff;
     --input-text:       #0f172a;
-    --input-placeholder: rgba(100, 116, 139, 0.5);
-    --accent-teal:      #009b7d;
+    --input-placeholder: #64748b;
+    --accent-teal:      #0f766e; /* Darker teal */
 }
 
 [data-theme="light"] .navbar {
-    background: rgba(255, 255, 255, 0.95) !important;
-    border-bottom: 1px solid rgba(0, 212, 170, 0.12) !important;
-    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.04) !important;
+    background: rgba(255, 255, 255, 0.98) !important;
+    border-bottom: 2px solid rgba(0, 212, 170, 0.2) !important;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.08) !important;
 }
-
 
 [data-theme="light"] .navbar::after {
-    background: linear-gradient(90deg, transparent, rgba(0, 212, 170, 0.2), transparent) !important;
+    background: linear-gradient(90deg, transparent, rgba(0, 212, 170, 0.3), transparent) !important;
 }
 
-
 [data-theme="light"] .nav-brand span {
-    background: linear-gradient(135deg, #1e293b, #64748b);
+    background: linear-gradient(135deg, #0f172a, #334155);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
 [data-theme="light"] .card {
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.03), 0 0 0 1px rgba(0, 212, 170, 0.05);
+    background: #ffffff !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0, 212, 170, 0.1);
 }
 
 [data-theme="light"] .nav-item {
-    color: #475569;
+    color: #0f172a !important;
+    font-weight: 600;
 }
 
 [data-theme="light"] .btn-primary {
-    color: #ffffff;
+    color: #ffffff !important;
 }
 
 
