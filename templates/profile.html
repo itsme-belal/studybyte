@@ -6,71 +6,71 @@
         
         <div class="dashboard-grid mb-4" style="grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem; align-items: start;">
             <!-- Profile Pic Section -->
-            <div class="form-group text-center" style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                <label class="form-label mb-2">Profile Picture</label>
-                <div id="profile-container" style="position: relative; width: 120px; height: 120px; border-radius: 50%; overflow: hidden; cursor: pointer; border: 3px solid var(--bg-surface); box-shadow: var(--shadow-lg); transition: var(--transition);"
+            <div class="form-group text-center" style="display: flex; flex-direction: column; align-items: center;">
+                <label class="form-label mb-2">PROFILE PICTURE</label>
+                <div id="profile-container" style="position: relative; width: 140px; height: 140px; border-radius: 50%; overflow: hidden; cursor: pointer; border: 3px solid var(--border); background: var(--bg-surface-hover); display: flex; align-items: center; justify-content: center; transition: all 0.3s ease;"
                      onclick="document.getElementById('profile_input').click()">
+                    
+                    <!-- Centered Label -->
+                    <span id="profile-placeholder" style="position: absolute; z-index: 1; font-size: 0.85rem; font-weight: 800; color: var(--text-muted); letter-spacing: 0.05em;">Profile</span>
+                    
                     {% if user.profile_pic %}
-                        <img src="{{ user.profile_pic }}" id="profile-preview" alt="Profile" style="width: 100%; height: 100%; object-fit: cover;">
+                    <img src="{{ user.profile_pic }}" id="profile-preview" alt="" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 2;" onerror="this.style.display='none'">
                     {% else %}
-                        <div id="profile-placeholder" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: var(--bg-surface-hover); color: var(--text-muted); text-align: center;">
-                            <span style="font-size: 0.75rem; font-weight: 800; letter-spacing: 0.05em;">PROFILE</span>
-                        </div>
+                    <img id="profile-preview" style="display: none; position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 2;" onerror="this.style.display='none'">
                     {% endif %}
-                    <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; opacity: 0; transition: 0.3s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0'">
-                        <i class="fa-solid fa-camera text-white" style="font-size: 1.2rem;"></i>
+
+                    <!-- Hover Overlay -->
+                    <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; opacity: 0; transition: 0.3s; z-index: 3;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0'">
+                        <i class="fa-solid fa-camera text-white" style="font-size: 1.5rem;"></i>
                     </div>
                 </div>
-                <input type="file" id="profile_input" name="profile_pic" accept="image/*" style="display: none;" onchange="previewImage(this, 'profile-preview', 'profile-placeholder')">
-                <p class="text-muted mt-2" style="font-size: 0.6rem;">Square Recommended</p>
+                <input type="file" id="profile_input" name="profile_pic" accept="image/*" style="display: none;" onchange="previewImage(this, 'profile-preview')">
+                <p class="text-muted mt-2" style="font-size: 0.65rem;">Square Recommended</p>
             </div>
 
             <!-- Cover Photo Section -->
             <div class="form-group" style="position: relative; width: 100%;">
-                <label class="form-label mb-2">Cover Photo</label>
-                <div id="cover-container" style="position: relative; height: 120px; border-radius: 12px; overflow: hidden; cursor: pointer; border: 2px dashed var(--border); transition: var(--transition);" 
+                <label class="form-label mb-2">COVER PHOTO</label>
+                <div id="cover-container" style="position: relative; height: 140px; border-radius: 12px; overflow: hidden; cursor: pointer; border: 2px dashed var(--border); background: var(--bg-surface-hover); display: flex; align-items: center; justify-content: center; transition: all 0.3s ease;" 
                      onclick="document.getElementById('cover_input').click()"
                      onmouseover="this.style.borderColor='var(--accent-teal)'"
                      onmouseout="this.style.borderColor='var(--border)'">
+                    
+                    <!-- Centered Label -->
+                    <span id="cover-placeholder" style="position: absolute; z-index: 1; font-size: 1rem; font-weight: 800; color: var(--text-muted); letter-spacing: 0.1em;">Cover</span>
+                    
                     {% if user.cover_photo %}
-                        <img src="{{ user.cover_photo }}" id="cover-preview" alt="Cover" style="width: 100%; height: 100%; object-fit: cover;">
+                    <img src="{{ user.cover_photo }}" id="cover-preview" alt="" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 2;" onerror="this.style.display='none'">
                     {% else %}
-                        <div id="cover-placeholder" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: var(--bg-surface-hover); color: var(--text-muted); text-align: center;">
-                            <span style="font-size: 0.85rem; font-weight: 800; letter-spacing: 0.1em;">COVER</span>
-                        </div>
+                    <img id="cover-preview" style="display: none; position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 2;" onerror="this.style.display='none'">
                     {% endif %}
 
-                    <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; opacity: 0; transition: 0.3s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0'">
-                        <i class="fa-solid fa-camera text-white" style="font-size: 1.5rem;"></i>
+                    <!-- Hover Overlay -->
+                    <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; opacity: 0; transition: 0.3s; z-index: 3;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0'">
+                        <i class="fa-solid fa-camera text-white" style="font-size: 2rem;"></i>
                     </div>
                 </div>
-                <input type="file" id="cover_input" name="cover_photo" accept="image/*" style="display: none;" onchange="previewImage(this, 'cover-preview', 'cover-placeholder')">
+                <input type="file" id="cover_input" name="cover_photo" accept="image/*" style="display: none;" onchange="previewImage(this, 'cover-preview')">
             </div>
         </div>
 
 
+
         <script>
-            function previewImage(input, previewId, placeholderId) {
+            function previewImage(input, previewId) {
                 if (input.files && input.files[0]) {
                     const reader = new FileReader();
                     reader.onload = function(e) {
-                        let img = document.getElementById(previewId);
-                        if (!img) {
-                            const placeholder = document.getElementById(placeholderId);
-                            img = document.createElement('img');
-                            img.id = previewId;
-                            img.style.width = '100%';
-                            img.style.height = '100%';
-                            img.style.objectFit = 'cover';
-                            placeholder.parentNode.insertBefore(img, placeholder);
-                            placeholder.style.display = 'none';
-                        }
+                        const img = document.getElementById(previewId);
                         img.src = e.target.result;
+                        img.style.display = 'block';
                     }
                     reader.readAsDataURL(input.files[0]);
                 }
             }
         </script>
+
 
 
         <div class="form-group">
