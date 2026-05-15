@@ -23,3 +23,5 @@ gunicorn==22.0.0
 # Environment Variables
 python-dotenv==1.0.1
 
+# Image Hosting (Persistent Storage for Render)
+cloudinary==1.40.0

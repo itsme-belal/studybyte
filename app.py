@@ -20,6 +20,18 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
+import cloudinary
+import cloudinary.uploader
+import cloudinary.api
+
+# ── Cloudinary Config (Persistent Storage) ──────────────────────────────
+cloudinary.config( 
+  cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME'), 
+  api_key = os.environ.get('CLOUDINARY_API_KEY'), 
+  api_secret = os.environ.get('CLOUDINARY_API_SECRET'),
+  secure = True
+)
+
 
 # ── All secrets loaded from environment variables ──────────────────────────────
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
@@ -60,6 +72,15 @@ socketio = SocketIO(
     logger=False,
     engineio_logger=False,
 )
+
+# ── Template Filters ──────────────────────────────
+@app.template_filter('resolve_upload')
+def resolve_upload_filter(filename):
+    if not filename:
+        return ""
+    if filename.startswith('http'):
+        return filename
+    return url_for('uploaded_file', filename=filename)
 
 DEPARTMENTS = [
     'B. Sc. in ICE', 'B. Sc. in CSE', 'B. Sc. in EEE', 'B. Pharm.',
@@ -1141,10 +1162,7 @@ def tutor_apply():
             flash('Grade report must be under 1MB.', 'error')
             return redirect(url_for('tutor_apply'))
 
-        filename = secure_filename(f"{user.studentId}_{file.filename}")
-        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-        
-        user.grade_report = filename
+        user.grade_report = upload_to_cloud(file)
         user.is_tutor_verified = False
         user.role = 'tutor'
         session['role'] = 'tutor'
@@ -1359,6 +1377,8 @@ def admin_dashboard():
         'total_users': User.query.count(),
         'students': User.query.filter_by(role='learner').count(),
         'tutors': User.query.filter_by(role='tutor').count(),
+        'verified_tutors': User.query.filter(User.role.ilike('tutor'), User.is_tutor_verified == True).count(),
+        'pending_tutors': User.query.filter(User.role.ilike('tutor'), User.is_tutor_verified == False, User.rejection_reason == None).count(),
         'total_listings': total_listings,
         'active_courses': active_courses,
         'hidden_courses': hidden_courses,
@@ -1488,10 +1508,21 @@ def verify_tutor(tutor_id):
 def tutor_search():
     check_and_freeze_slots()
     q = request.args.get('q', '')
-    query = User.query.filter_by(role='tutor', is_tutor_verified=True)
+    # Use ilike for case-insensitive matching in Postgres/SQLite
+    query = User.query.filter(User.role.ilike('tutor'), User.is_tutor_verified == True)
+    
     if q:
-        query = query.filter(User.name.contains(q) | User.skills.contains(q) | User.department.contains(q))
+        search_filter = f"%{q}%"
+        query = query.filter(
+            User.name.ilike(search_filter) | 
+            User.skills.ilike(search_filter) | 
+            User.department.ilike(search_filter)
+        )
+    
     tutors = query.all()
+    # Debug log for Render logs
+    print(f"Tutor Search Debug: Found {len(tutors)} verified tutors for query '{q}'")
+    
     return render_template('tutor_search.html', tutors=tutors, departments=DEPARTMENTS)
 
 @app.route('/user/<int:user_id>')
@@ -2085,11 +2116,17 @@ def admin_reply_support(ticket_id):
         flash('Support ticket replied to successfully!', 'success')
     return redirect(url_for('admin_dashboard'))
 
-def upload_to_cloud(file):
-    # Stub for Cloud Storage (S3 / Cloudinary)
-    filename = secure_filename(f"{uuid.uuid4().hex}_{file.filename}")
-    file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-    return url_for('uploaded_file', filename=filename)
+def upload_to_cloud(file, folder="studybyte/general"):
+    if not os.environ.get('CLOUDINARY_API_KEY'):
+        # Fallback to local for development
+        filename = secure_filename(f"{uuid.uuid4().hex}_{file.filename}")
+        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+        return url_for('uploaded_file', filename=filename)
+    
+    # Upload to Cloudinary
+    # Resource type 'auto' handles images, pdfs, etc.
+    upload_result = cloudinary.uploader.upload(file, folder=folder, resource_type="auto")
+    return upload_result['secure_url']
 
 @app.route('/profile', methods=['GET', 'POST'])
 @login_required

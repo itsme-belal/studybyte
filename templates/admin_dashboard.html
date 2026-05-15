@@ -201,11 +201,17 @@
                         <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#818cf8,transparent);"></div>
                         <div style="position:absolute;right:0.75rem;bottom:0.5rem;font-size:1.8rem;opacity:0.06;">🎓</div>
                     </div>
-                    <div style="position:relative;overflow:hidden;border-radius:12px;padding:1rem 1.1rem;background:linear-gradient(135deg,rgba(10,18,38,0.9),rgba(6,11,22,0.95));border:1px solid rgba(245,158,11,0.12);transition:all 0.3s;">
-                        <div style="font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#475569;">Tutors</div>
-                        <div style="font-size:1.8rem;font-weight:800;color:#f59e0b;font-family:monospace;margin-top:4px;line-height:1;">{{ stats.tutors }}</div>
+                    <div style="position:relative;overflow:hidden;border-radius:12px;padding:1rem 1.1rem;background:linear-gradient(135deg,rgba(10,18,38,0.9),rgba(6,11,22,0.95));border:1px solid rgba(0,255,136,0.2);transition:all 0.3s;">
+                        <div style="font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#00ff88;">Verified Tutors</div>
+                        <div style="font-size:1.8rem;font-weight:800;color:#00ff88;font-family:monospace;margin-top:4px;line-height:1;">{{ stats.verified_tutors }}</div>
+                        <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#00ff88,transparent);"></div>
+                        <div style="position:absolute;right:0.75rem;bottom:0.5rem;font-size:1.8rem;opacity:0.06;">✅</div>
+                    </div>
+                    <div style="position:relative;overflow:hidden;border-radius:12px;padding:1rem 1.1rem;background:linear-gradient(135deg,rgba(10,18,38,0.9),rgba(6,11,22,0.95));border:1px solid rgba(245,158,11,0.2);transition:all 0.3s;">
+                        <div style="font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#f59e0b;">Pending Tutors</div>
+                        <div style="font-size:1.8rem;font-weight:800;color:#f59e0b;font-family:monospace;margin-top:4px;line-height:1;">{{ stats.pending_tutors }}</div>
                         <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#f59e0b,transparent);"></div>
-                        <div style="position:absolute;right:0.75rem;bottom:0.5rem;font-size:1.8rem;opacity:0.06;">🧑‍🏫</div>
+                        <div style="position:absolute;right:0.75rem;bottom:0.5rem;font-size:1.8rem;opacity:0.06;">⏳</div>
                     </div>
                     <div style="position:relative;overflow:hidden;border-radius:12px;padding:1rem 1.1rem;background:linear-gradient(135deg,rgba(10,18,38,0.9),rgba(6,11,22,0.95));border:1px solid rgba(0,212,170,0.12);transition:all 0.3s;">
                         <div style="font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#475569;">Active Courses</div>
@@ -385,7 +391,7 @@
                                 <p class="flex justify-between"><span class="opacity-50">Score Matrix:</span> <span class="text-yellow-400">{{ t.rating|round(1) }} <span class="opacity-50">({{ t.review_count }} logs)</span></span></p>
                                 <p class="flex justify-between items-center"><span class="opacity-50">Doc Trace:</span> 
                                     {% if t.grade_report %}
-                                    <a href="{{ url_for('uploaded_file', filename=t.grade_report) }}" target="_blank" class="text-indigo-400 hover:text-indigo-300 border-b border-indigo-400/30 pb-0.5 uppercase text-[10px] tracking-wider">Inspect File</a>
+                                    <a href="{{ t.grade_report | resolve_upload }}" target="_blank" class="text-indigo-400 hover:text-indigo-300 border-b border-indigo-400/30 pb-0.5 uppercase text-[10px] tracking-wider">Inspect File</a>
                                     {% else %}
                                     <span class="text-red-400 text-[10px]">ERR_NO_DOC</span>
                                     {% endif %}
