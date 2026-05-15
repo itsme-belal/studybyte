@@ -4,29 +4,73 @@
     <h2 class="mb-4">My Profile Settings</h2>
     <form method="POST" enctype="multipart/form-data">
         
-        <div class="dashboard-grid mb-4" style="grid-template-columns: 1fr 1fr;">
-            <!-- Profile Pic -->
-            <div class="form-group text-center">
-                {% if user.profile_pic %}
-                    <img src="{{ user.profile_pic }}" alt="Profile" style="width:100px; height:100px; border-radius:50%; object-fit:cover; margin:0 auto; display:block;">
-                {% else %}
-                    <div style="width:100px;height:100px;border-radius:50%;background:var(--bg-surface-hover);display:flex;align-items:center;justify-content:center;margin:0 auto;">No Image</div>
-                {% endif %}
-                <label class="form-label mt-2">Profile Picture</label>
-                <input type="file" name="profile_pic" class="form-control" accept="image/*" style="font-size: 0.8rem; padding: 0.3rem;">
+        <div style="display: grid; grid-template-columns: 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+            <!-- Cover Photo Section -->
+            <div class="form-group" style="position: relative; width: 100%;">
+                <label class="form-label mb-2">Cover Photo</label>
+                <div id="cover-container" style="position: relative; height: 160px; border-radius: 12px; overflow: hidden; cursor: pointer; border: 2px dashed var(--border); transition: var(--transition);" 
+                     onclick="document.getElementById('cover_input').click()"
+                     onmouseover="this.style.borderColor='var(--accent-teal)'"
+                     onmouseout="this.style.borderColor='var(--border)'">
+                    {% if user.cover_photo %}
+                        <img src="{{ user.cover_photo }}" id="cover-preview" alt="Cover" style="width: 100%; height: 100%; object-fit: cover;">
+                    {% else %}
+                        <div id="cover-placeholder" style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--bg-surface-hover); color: var(--text-muted);">
+                            <i class="fa-solid fa-image mb-2" style="font-size: 1.5rem;"></i>
+                            <span style="font-size: 0.75rem;">Click to upload cover</span>
+                        </div>
+                    {% endif %}
+                    <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; opacity: 0; transition: 0.3s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0'">
+                        <i class="fa-solid fa-camera text-white" style="font-size: 1.5rem;"></i>
+                    </div>
+                </div>
+                <input type="file" id="cover_input" name="cover_photo" accept="image/*" style="display: none;" onchange="previewImage(this, 'cover-preview', 'cover-placeholder')">
             </div>
-            
-            <!-- Cover Photo -->
-            <div class="form-group text-center">
-                 {% if user.cover_photo %}
-                    <img src="{{ user.cover_photo }}" alt="Cover" style="width:100%; height:100px; border-radius:8px; object-fit:cover; margin:0 auto; display:block;">
-                {% else %}
-                    <div style="width:100%;height:100px;border-radius:8px;background:var(--bg-surface-hover);display:flex;align-items:center;justify-content:center;">No Cover</div>
-                {% endif %}
-                <label class="form-label mt-2">Cover Photo</label>
-                <input type="file" name="cover_photo" class="form-control" accept="image/*" style="font-size: 0.8rem; padding: 0.3rem;">
+
+            <!-- Profile Pic Section -->
+            <div class="form-group text-center" style="display: flex; flex-direction: column; align-items: center;">
+                <label class="form-label mb-2">Profile Picture</label>
+                <div id="profile-container" style="position: relative; width: 120px; height: 120px; border-radius: 50%; overflow: hidden; cursor: pointer; border: 3px solid var(--bg-surface); box-shadow: var(--shadow-lg); transition: var(--transition);"
+                     onclick="document.getElementById('profile_input').click()">
+                    {% if user.profile_pic %}
+                        <img src="{{ user.profile_pic }}" id="profile-preview" alt="Profile" style="width: 100%; height: 100%; object-fit: cover;">
+                    {% else %}
+                        <div id="profile-placeholder" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: var(--bg-surface-hover); color: var(--text-muted);">
+                            <i class="fa-solid fa-user" style="font-size: 2rem;"></i>
+                        </div>
+                    {% endif %}
+                    <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; opacity: 0; transition: 0.3s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0'">
+                        <i class="fa-solid fa-camera text-white" style="font-size: 1.2rem;"></i>
+                    </div>
+                </div>
+                <input type="file" id="profile_input" name="profile_pic" accept="image/*" style="display: none;" onchange="previewImage(this, 'profile-preview', 'profile-placeholder')">
+                <p class="text-muted mt-2" style="font-size: 0.7rem;">Recommended: Square Image</p>
             </div>
         </div>
+
+        <script>
+            function previewImage(input, previewId, placeholderId) {
+                if (input.files && input.files[0]) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        let img = document.getElementById(previewId);
+                        if (!img) {
+                            const placeholder = document.getElementById(placeholderId);
+                            img = document.createElement('img');
+                            img.id = previewId;
+                            img.style.width = '100%';
+                            img.style.height = '100%';
+                            img.style.objectFit = 'cover';
+                            placeholder.parentNode.insertBefore(img, placeholder);
+                            placeholder.style.display = 'none';
+                        }
+                        img.src = e.target.result;
+                    }
+                    reader.readAsDataURL(input.files[0]);
+                }
+            }
+        </script>
+
 
         <div class="form-group">
             <label class="form-label">Full Name</label>

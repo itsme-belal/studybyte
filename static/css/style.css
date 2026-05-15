@@ -36,18 +36,50 @@
 }
 
 [data-theme="light"] {
-    --bg-dark:          #f0f4ff;
-    --bg-surface:       rgba(255, 255, 255, 0.85);
-    --bg-surface-hover: rgba(240, 244, 255, 0.95);
+    --bg-dark:          #f8fafc;
+    --bg-surface:       #ffffff;
+    --bg-surface-hover: #f1f5f9;
     --text-main:        #0f172a;
     --text-muted:       #475569;
     --text-heading:     #0f172a;
-    --border:           rgba(15, 23, 42, 0.12);
-    --border-glow:      rgba(0, 212, 170, 0.4);
-    --input-bg:         rgba(255, 255, 255, 0.95);
+    --border:           rgba(15, 23, 42, 0.08);
+    --border-glow:      rgba(0, 212, 170, 0.2);
+    --input-bg:         #ffffff;
     --input-text:       #0f172a;
-    --input-placeholder: rgba(71, 85, 105, 0.7);
+    --input-placeholder: rgba(100, 116, 139, 0.5);
+    --accent-teal:      #009b7d;
 }
+
+[data-theme="light"] .navbar {
+    background: rgba(255, 255, 255, 0.95) !important;
+    border-bottom: 1px solid rgba(0, 212, 170, 0.12) !important;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.04) !important;
+}
+
+
+[data-theme="light"] .navbar::after {
+    background: linear-gradient(90deg, transparent, rgba(0, 212, 170, 0.2), transparent) !important;
+}
+
+
+[data-theme="light"] .nav-brand span {
+    background: linear-gradient(135deg, #1e293b, #64748b);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+[data-theme="light"] .card {
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.03), 0 0 0 1px rgba(0, 212, 170, 0.05);
+}
+
+[data-theme="light"] .nav-item {
+    color: #475569;
+}
+
+[data-theme="light"] .btn-primary {
+    color: #ffffff;
+}
+
 
 /* ── Force Tailwind Override — Fix white-on-white forms ── */
 input, textarea, select {
@@ -669,13 +701,23 @@ footer::before {
 }
 
 /* ── Responsive ──────────────────────────────────────────────── */
-@media (max-width: 768px) {
-    .navbar { padding: 0.75rem 1rem; }
-    .nav-links { gap: 0.1rem; }
-    .nav-item { padding: 0.35rem 0.6rem; font-size: 0.8rem; }
-    .container { padding: 1rem; }
-    body::before, body::after { display: none; }
+@media (max-width: 1024px) {
+    .navbar { padding: 0.8rem 1.2rem; }
+    .container { padding: 1.2rem; }
 }
+
+@media (max-width: 768px) {
+    .container { padding: 1rem; }
+    .dashboard-grid { grid-template-columns: 1fr; }
+    .card { padding: 1.2rem; }
+    .btn-lg { width: 100%; text-align: center; justify-content: center; }
+}
+
+@media (max-width: 480px) {
+    .nav-brand { font-size: 1.2rem; }
+    .container { padding: 0.75rem; }
+}
+
 
 /* ── Light theme input override ────────────────────────────── */
 [data-theme="light"] input,

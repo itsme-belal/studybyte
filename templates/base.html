@@ -38,7 +38,8 @@
         /* ── Loading Screen ───────────────────── */
         #page-loader {
             position: fixed; inset: 0; z-index: 99999;
-            background: #050a17;
+            background: var(--bg-dark);
+
             display: flex; align-items: center; justify-content: center;
             flex-direction: column; gap: 1.5rem;
             transition: opacity 0.6s ease, visibility 0.6s ease;
@@ -110,12 +111,45 @@
         }
         .nav-item-anim:hover::after { width: 80%; }
         /* ── Mobile nav ─────────────────────────── */
-        @media (max-width: 768px) {
+        @media (max-width: 1024px) {
             #mobile-menu-btn { display: flex !important; }
-            .nav-links { display: none; }
-            .nav-links.open { display: flex; flex-direction: column; position: absolute; top: 62px; left: 0; right: 0; background: rgba(5,10,23,0.98); padding: 1rem; border-bottom: 1px solid rgba(0,212,170,0.2); gap: 0.5rem; z-index: 999; }
+            .nav-links { 
+                display: none; 
+                flex-direction: column; 
+                position: absolute; 
+                top: 100%; 
+                left: 0; 
+                right: 0; 
+                background: var(--bg-surface);
+                backdrop-filter: blur(30px);
+                padding: 1.5rem; 
+                border-bottom: 1px solid var(--border); 
+                gap: 1rem; 
+                z-index: 999;
+                max-height: calc(100vh - 70px);
+                overflow-y: auto;
+                box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+                transform: translateY(-10px);
+                opacity: 0;
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                pointer-events: none;
+            }
+            .nav-links.open { 
+                display: flex; 
+                transform: translateY(0);
+                opacity: 1;
+                pointer-events: auto;
+                background: var(--bg-surface);
+                border-bottom: 2px solid var(--accent-teal);
+            }
+
+
+            .nav-item { width: 100%; padding: 0.8rem 1rem; border-radius: 0.75rem; border-left: none !important; margin-left: 0 !important; }
+            .wallet-badge { width: fit-content; margin: 0.5rem 0; }
+            #theme-selector { width: 100% !important; margin: 0.5rem 0; }
         }
         #mobile-menu-btn { display: none; }
+
     </style>
 </head>
 
