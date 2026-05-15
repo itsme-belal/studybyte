@@ -255,7 +255,13 @@
             <div style="font-size:0.78rem;color:var(--text-muted);line-height:1.5;flex-grow:1;margin-bottom:1rem;">{{ listing.description[:100] }}...</div>
             <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border);padding-top:0.75rem;">
                 <a href="{{ url_for('view_profile', user_id=listing.tutor.id) }}" style="display:flex;align-items:center;gap:7px;text-decoration:none;">
-                    <div style="width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#00d4aa,#7c3aed);display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;color:#050a17;">{{ listing.tutor.name[0]|upper }}</div>
+                    <div style="width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#00d4aa,#7c3aed);display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;color:#050a17;overflow:hidden;">
+                        {% if listing.tutor.profile_pic %}
+                            <img src="{{ listing.tutor.profile_pic }}" style="width:100%;height:100%;object-fit:cover;">
+                        {% else %}
+                            {{ listing.tutor.name[0]|upper }}
+                        {% endif %}
+                    </div>
                     <div>
                         <div style="font-size:0.75rem;font-weight:600;color:var(--text-main);">{{ listing.tutor.name }}</div>
                         <div style="font-size:0.66rem;color:#f59e0b;">⭐ {{ "%.1f"|format(listing.tutor.rating) }}</div>

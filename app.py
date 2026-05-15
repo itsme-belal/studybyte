@@ -1492,7 +1492,7 @@ def tutor_search():
     if q:
         query = query.filter(User.name.contains(q) | User.skills.contains(q) | User.department.contains(q))
     tutors = query.all()
-    return render_template('tutor_search.html', tutors=tutors)
+    return render_template('tutor_search.html', tutors=tutors, departments=DEPARTMENTS)
 
 @app.route('/user/<int:user_id>')
 def view_profile(user_id):

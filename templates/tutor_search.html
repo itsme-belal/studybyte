@@ -22,10 +22,8 @@
         
         <select id="filterSubject" class="form-control" style="width: auto; padding: 0.3rem;" onchange="applyTutorFilters()">
             <option value="">All Departments/Subjects</option>
-            {% for t in tutors %}
-                {% if t.department %}
-                  <option value="{{ t.department }}">{{ t.department }}</option>
-                {% endif %}
+            {% for d in departments %}
+                <option value="{{ d }}">{{ d }}</option>
             {% endfor %}
         </select>
     </div>
@@ -35,11 +33,11 @@
     {% for tutor in tutors %}
     <div class="card flex flex-col p-4 rounded-xl shadow break-words bg-surface tutor-card" style="background:var(--bg-surface)" data-rating="{{ tutor.rating }}" data-dept="{{ tutor.department }}">
         <div class="flex items-center gap-4 mb-4">
-             <div style="width: 60px; height: 60px; border-radius: 50%; background: var(--bg-surface-hover); overflow: hidden; flex-shrink: 0;">
+             <div style="width: 60px; height: 60px; border-radius: 50%; background: var(--bg-surface-hover); overflow: hidden; flex-shrink: 0; display:flex; align-items:center; justify-content:center;">
                  {% if tutor.profile_pic %}
                     <img src="{{ tutor.profile_pic }}" style="width: 100%; height: 100%; object-fit: cover;">
                  {% else %}
-                    <div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size: 10px; color: var(--text-muted);">No Pic</div>
+                    <div style="font-size: 1.5rem; font-weight: 700; color: var(--text-muted);">{{ tutor.name[0]|upper }}</div>
                  {% endif %}
             </div>
             <div>
