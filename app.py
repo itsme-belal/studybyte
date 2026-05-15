@@ -2116,17 +2116,30 @@ def admin_reply_support(ticket_id):
         flash('Support ticket replied to successfully!', 'success')
     return redirect(url_for('admin_dashboard'))
 
-def upload_to_cloud(file, folder="studybyte/general"):
-    if not os.environ.get('CLOUDINARY_API_KEY'):
-        # Fallback to local for development
+def upload_to_cloud(file, folder="studybyte"):
+
+    """Helper to upload a file to Cloudinary with local fallback if config is missing or invalid."""
+    if not os.environ.get('CLOUDINARY_API_KEY') or not os.environ.get('CLOUDINARY_CLOUD_NAME'):
+        # Fallback to local if no credentials provided
         filename = secure_filename(f"{uuid.uuid4().hex}_{file.filename}")
-        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+        save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(save_path)
         return url_for('uploaded_file', filename=filename)
     
-    # Upload to Cloudinary
-    # Resource type 'auto' handles images, pdfs, etc.
-    upload_result = cloudinary.uploader.upload(file, folder=folder, resource_type="auto")
-    return upload_result['secure_url']
+    try:
+        # Upload to Cloudinary
+        upload_result = cloudinary.uploader.upload(file, folder=folder, resource_type="auto")
+        return upload_result['secure_url']
+    except Exception as e:
+        # If Cloudinary fails (invalid credentials, network, etc.), fallback to local
+        # This prevents a 500 error and allows the app to continue working
+        print(f"Cloudinary upload error: {e}")
+        file.seek(0) # Reset file pointer for local save
+        filename = secure_filename(f"{uuid.uuid4().hex}_{file.filename}")
+        save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(save_path)
+        return url_for('uploaded_file', filename=filename)
+
 
 @app.route('/profile', methods=['GET', 'POST'])
 @login_required
