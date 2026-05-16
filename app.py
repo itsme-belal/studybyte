@@ -2665,17 +2665,6 @@ def force_close_session(booking_id):
     flash(f'Session BKG-{booking.id} has been force-closed. Learner refunded.', 'success')
     return redirect(url_for('admin_sessions'))
 
-@app.route('/set_theme', methods=['POST'])
-@login_required
-def set_theme():
-    data = request.get_json()
-    theme = data.get('theme', 'system')
-    user = User.query.get(session['user_id'])
-    if user:
-        user.theme_preference = theme
-        db.session.commit()
-        return jsonify({'status': 'success'})
-    return jsonify({'status': 'error'}), 400
 
 if __name__ == '__main__':
     debug_mode = os.environ.get('FLASK_ENV') != 'production'
