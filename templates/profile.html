@@ -12,7 +12,7 @@
                      onclick="document.getElementById('profile_input').click()">
                     
                     <!-- Centered Label -->
-                    <span id="profile-placeholder" style="position: absolute; z-index: 1; font-size: 0.85rem; font-weight: 800; color: var(--text-muted); letter-spacing: 0.05em;">Profile</span>
+                    <span id="profile-placeholder" style="z-index: 1; font-size: 0.85rem; font-weight: 800; color: var(--text-muted); letter-spacing: 0.05em;">Profile</span>
                     
                     {% if user.profile_pic %}
                     <img src="{{ user.profile_pic }}" id="profile-preview" alt="" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 2;" onerror="this.style.display='none'">
@@ -38,7 +38,7 @@
                      onmouseout="this.style.borderColor='var(--border)'">
                     
                     <!-- Centered Label -->
-                    <span id="cover-placeholder" style="position: absolute; z-index: 1; font-size: 1rem; font-weight: 800; color: var(--text-muted); letter-spacing: 0.1em;">Cover</span>
+                    <span id="cover-placeholder" style="z-index: 1; font-size: 1rem; font-weight: 800; color: var(--text-muted); letter-spacing: 0.1em;">Cover</span>
                     
                     {% if user.cover_photo %}
                     <img src="{{ user.cover_photo }}" id="cover-preview" alt="" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 2;" onerror="this.style.display='none'">

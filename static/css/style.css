@@ -30,31 +30,46 @@
 }
 
 [data-theme="light"] {
-    --bg-dark:          #f1f5f9; /* Slate 100 */
+    --bg-dark:          #f8fafc; /* Slate 50 */
     --bg-surface:       #ffffff;
-    --bg-surface-hover: #f8fafc;
-    --text-main:        #1e293b; /* Slate 800 */
+    --bg-surface-hover: #f1f5f9;
+    --text-main:        #334155; /* Slate 700 */
     --text-muted:       #64748b; /* Slate 500 */
     --text-heading:     #0f172a; /* Slate 900 */
-    --border:           rgba(15, 23, 42, 0.1);
-    --border-glow:      rgba(16, 185, 129, 0.2);
+    --border:           rgba(0, 0, 0, 0.08);
+    --border-glow:      rgba(16, 185, 129, 0.15);
     --input-bg:         #ffffff;
-    --input-text:       #1e293b;
-    --accent-teal:      #059669; /* Darker Emerald */
+    --input-text:       #0f172a;
+    --accent-teal:      #059669; 
 }
 
-/* ── Navbar Fixes ── */
+/* ── Light Mode Specific Overrides ── */
 [data-theme="light"] .navbar {
-    background: rgba(255, 255, 255, 0.95) !important;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important;
+    background: #ffffff !important;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+}
+
+[data-theme="light"] .nav-brand {
+    color: #059669 !important;
+}
+
+[data-theme="light"] .nav-brand span {
+    color: #0f172a !important;
+    background: none !important;
+    -webkit-text-fill-color: initial !important;
+}
+
+[data-theme="light"] .nav-links {
+    background: #ffffff !important;
+    border-left: 1px solid rgba(0, 0, 0, 0.06) !important;
 }
 
 [data-theme="light"] .nav-item {
-    color: var(--text-muted) !important;
+    color: #475569 !important;
 }
 [data-theme="light"] .nav-item:hover {
-    color: var(--accent-teal) !important;
+    background: #f1f5f9 !important;
+    color: #059669 !important;
 }
 
 /* ── Form Visibility Fixes ── */
@@ -227,6 +242,25 @@ body::after {
 }
 
 /* ── Navbar ─────────────────────────────────────────────────── */
+#mobile-menu-btn {
+    display: none;
+    background: transparent;
+    border: 1px solid var(--accent-teal);
+    border-radius: 0.5rem;
+    padding: 0.4rem 0.7rem;
+    color: var(--accent-teal);
+    font-size: 1.2rem;
+    cursor: pointer;
+    transition: var(--transition);
+    align-items: center;
+    justify-content: center;
+}
+
+#mobile-menu-btn:hover {
+    background: rgba(0, 212, 170, 0.1);
+    box-shadow: var(--glow-teal);
+}
+
 .navbar {
     background: linear-gradient(135deg, rgba(5, 10, 23, 0.9) 0%, rgba(10, 18, 40, 0.85) 100%);
     backdrop-filter: blur(20px) saturate(180%);
@@ -687,7 +721,7 @@ footer::before {
     .navbar { padding: 0.8rem 1.2rem; }
     .container { padding: 1.2rem; }
     
-    .mobile-menu-btn { display: flex !important; }
+    #mobile-menu-btn { display: flex !important; }
     
     .nav-links {
         position: fixed;
@@ -714,7 +748,7 @@ footer::before {
         font-size: 1.1rem;
         padding: 0.8rem 1rem;
         border-bottom: 1px solid var(--border);
-        color: var(--text-heading) !important;
+        color: var(--text-main) !important;
     }
 
     .wallet-badge {
