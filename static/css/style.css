@@ -729,14 +729,15 @@ footer::before {
         right: -100%;
         width: 280px;
         height: 100vh;
-        background: var(--bg-dark);
-        backdrop-filter: blur(40px);
+        background: #050a17 !important; /* Solid Dark Background */
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
         flex-direction: column;
         padding: 5rem 1.5rem 2rem;
         transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         z-index: 999;
         border-left: 1px solid var(--border);
-        box-shadow: -10px 0 30px rgba(0,0,0,0.5);
+        box-shadow: -15px 0 40px rgba(0,0,0,0.7);
     }
     
     .nav-links.open {
