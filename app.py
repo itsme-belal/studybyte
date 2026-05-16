@@ -1,13 +1,13 @@
 import os
 from dotenv import load_dotenv
-load_dotenv()  # Loads .env file locally; safely ignored on Render (env vars are set there directly)
+load_dotenv()
 
-# ── eventlet monkey-patch: ONLY in production (Render).
-# eventlet is incompatible with Python 3.12 locally; we use threading mode instead.
+# ── eventlet monkey-patch: MUST BE AT THE VERY TOP for production (Render) ──
 _is_production = os.environ.get('FLASK_ENV') == 'production'
 if _is_production:
     import eventlet
     eventlet.monkey_patch()
+    print("🚀 StudyByte: Eventlet monkey-patch applied for production.")
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_from_directory, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
