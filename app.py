@@ -363,13 +363,8 @@ def log_activity(user_id, action_type, description):
     except Exception as e:
         print(f"Failed to log activity: {e}")
 
-def send_verification_email(to_email, code):
-    """
-    Sends a 6-digit verification code via Brevo (Sendinblue) REST API.
-    Uses HTTPS — no SMTP ports needed, works on Render free tier.
-    Can send to ANY email address without domain verification.
-    Requires BREVO_API_KEY and EMAIL_USER environment variables.
-    """
+def send_email_brevo(to_email, subject, body_text):
+    """Sends an email via Brevo REST API."""
     api_key = os.environ.get('BREVO_API_KEY')
     sender_email = os.environ.get('EMAIL_USER', 'noreply@studybyte.com')
 
@@ -388,26 +383,59 @@ def send_verification_email(to_email, code):
             json={
                 'sender': {'name': 'StudyByte', 'email': sender_email},
                 'to': [{'email': to_email}],
-                'subject': 'StudyByte Password Reset Code',
-                'textContent': (
-                    f'Hello,\n\n'
-                    f'Your StudyByte password reset code is:\n\n'
-                    f'  {code}\n\n'
-                    f'This code expires in 10 minutes.\n\n'
-                    f'If you did not request this, please ignore this email.\n\n'
-                    f'— The StudyByte Team'
-                )
+                'subject': subject,
+                'textContent': body_text
             },
             timeout=10
         )
-        if response.status_code in (200, 201):
-            return True
-        else:
-            print(f"Brevo API Error: {response.status_code} {response.text}")
-            return False
+        return response.status_code < 300
     except Exception as e:
-        print(f"Brevo Email Error: {e}")
+        print(f"Brevo email error: {e}")
         return False
+
+def create_notification(user_id, message, action_url=None, email_subject=None):
+    """Creates a database notification, pushes via Socket.IO, and optionally sends an email."""
+    try:
+        notif = Notification(user_id=user_id, message=message, action_url=action_url)
+        db.session.add(notif)
+        db.session.commit()
+
+        # ── Live Push ──────────────────────────
+        try:
+            socketio.emit('new_notification', {
+                'message': message,
+                'action_url': action_url,
+                'timestamp': 'Just now'
+            }, room=f"user_{user_id}")
+        except Exception:
+            pass
+
+        # ── Email Alert ──────────────────────────
+        if email_subject:
+            user = User.query.get(user_id)
+            if user and user.email:
+                # Include the host URL in the action link
+                link = f"{request.host_url.rstrip('/')}{action_url}" if action_url else request.host_url
+                email_body = f"Hello {user.name},\n\n{message}\n\nView details: {link}\n\n— The StudyByte Team"
+                send_email_brevo(user.email, email_subject, email_body)
+
+        return notif
+    except Exception as e:
+        print(f"Failed to create notification: {e}")
+        db.session.rollback()
+        return None
+
+def send_verification_email(to_email, code):
+    subject = "StudyByte Password Reset Code"
+    body = (
+        f'Hello,\n\n'
+        f'Your StudyByte password reset code is:\n\n'
+        f'  {code}\n\n'
+        f'This code expires in 10 minutes.\n\n'
+        f'If you did not request this, please ignore this email.\n\n'
+        f'— The StudyByte Team'
+    )
+    return send_email_brevo(to_email, subject, body)
 
 @app.context_processor
 def inject_user():
@@ -1732,6 +1760,15 @@ def book_session(listing_id):
     db.session.commit()
     
     flash('Booking successful! Tokens held in escrow.', 'success')
+
+    # Notify Tutor
+    create_notification(
+        user_id=listing.tutor_id,
+        message=f"🆕 New booking request from {session.get('name')} for '{listing.title}' (BKG-{booking.id}).",
+        action_url='/tutor/dashboard',
+        email_subject="New Booking Request - StudyByte"
+    )
+
     return redirect(url_for('learner_dashboard'))
 
 @app.route('/booking/<int:booking_id>/confirm', methods=['POST'])
@@ -1751,6 +1788,15 @@ def confirm_booking(booking_id):
     db.session.commit()
     
     flash('Booking confirmed! A meeting session has been generated automatically.', 'success')
+
+    # Notify Learner
+    create_notification(
+        user_id=booking.learner_id,
+        message=f"✅ Your booking for '{booking.listing.title}' (BKG-{booking.id}) has been confirmed by the tutor! A meeting room is ready.",
+        action_url='/learner_dashboard',
+        email_subject="Booking Confirmed - StudyByte"
+    )
+
     return redirect(url_for('tutor_dashboard'))
 
 @app.route('/booking/<int:booking_id>/check_in', methods=['POST'])
@@ -2010,6 +2056,17 @@ def admin_withdraw(w_id, action):
         wallet.balance += req.token_amount
         hist = TransactionHistory(user_id=req.user_id, amount=req.token_amount, type='Refund', description='Withdrawal request rejected')
         db.session.add(hist)
+        
+    # Notify User
+    status_msg = "Approved" if action == 'approve' else "Rejected"
+    notif_msg = f"💳 Your withdrawal request for {req.token_amount} tokens has been {status_msg} by the admin."
+    create_notification(
+        user_id=req.user_id,
+        message=notif_msg,
+        action_url='/wallet',
+        email_subject=f"Withdrawal Request {status_msg} - StudyByte"
+    )
+
     db.session.commit()
     return redirect(url_for('admin_dashboard'))
 
@@ -2029,6 +2086,17 @@ def admin_purchase(p_id, action):
     else:
         req.status = 'Rejected'
         flash('Purchase rejected.', 'error')
+        
+    # Notify User
+    status_msg = "Approved" if action == 'approve' else "Rejected"
+    notif_msg = f"💰 Your purchase request for {req.token_amount} tokens has been {status_msg} by the admin."
+    create_notification(
+        user_id=req.user_id,
+        message=notif_msg,
+        action_url='/wallet',
+        email_subject=f"Token Purchase {status_msg} - StudyByte"
+    )
+
     db.session.commit()
     return redirect(url_for('admin_dashboard'))
 
@@ -2241,6 +2309,17 @@ def cancel_booking(booking_id):
         
     db.session.commit()
     flash('Booking cancelled successfully.', 'success')
+
+    # Notify Other Party
+    other_party_id = booking.listing.tutor_id if is_learner else booking.learner_id
+    canceller_name = session.get('name')
+    create_notification(
+        user_id=other_party_id,
+        message=f"❌ Booking BKG-{booking.id} ({booking.listing.title}) has been cancelled by {canceller_name}.",
+        action_url='/wallet',
+        email_subject="Booking Cancelled - StudyByte"
+    )
+
     return redirect(url_for('dashboard'))
 
 @app.route('/booking/<int:booking_id>/chat')
@@ -2360,13 +2439,11 @@ def handle_message(data):
         if booking:
             receiver_id = booking.listing.tutor_id if sender_id == booking.learner_id else booking.learner_id
             
-            notif = Notification(
+            create_notification(
                 user_id=receiver_id,
-                message=f"New message from {sender.name}: {message[:40]}...",
+                message=f"💬 New message from {sender.name}: {message[:40]}...",
                 action_url=f"/booking/{room}/chat"
             )
-            db.session.add(notif)
-            db.session.commit()
         
         emit('receive_message', {
             'sender_name': sender.name,
@@ -2523,6 +2600,14 @@ def admin_resolve_dispute(dispute_id):
         booking.status = 'Cancelled'
         
     log_activity(session['user_id'], 'ADMIN_DISPUTE', f"Resolved dispute #{dispute.id} with action: {action}")
+    
+    # Notify both parties
+    learner_msg = f"⚖️ Dispute resolved for BKG-{booking.id}. Admin action: {action.replace('_', ' ').capitalize()}."
+    tutor_msg   = f"⚖️ Dispute resolved for BKG-{booking.id}. Admin action: {action.replace('_', ' ').capitalize()}."
+    
+    create_notification(user_id=booking.learner_id, message=learner_msg, action_url='/learner/dashboard', email_subject="Dispute Resolved - StudyByte")
+    create_notification(user_id=booking.listing.tutor_id, message=tutor_msg, action_url='/tutor/dashboard', email_subject="Dispute Resolved - StudyByte")
+
     db.session.commit()
     flash(f'Dispute resolved with action: {action}', 'success')
     return redirect(url_for('admin_disputes'))
@@ -2562,16 +2647,18 @@ def force_close_session(booking_id):
     booking.status = 'Cancelled'
 
     # Notify both parties
-    db.session.add(Notification(
+    create_notification(
         user_id=booking.learner_id,
         message=f"⚠️ Your session BKG-{booking.id} was force-closed by an admin. Reason: {reason}. Your payment has been refunded.",
-        action_url='/learner/dashboard'
-    ))
-    db.session.add(Notification(
+        action_url='/learner/dashboard',
+        email_subject="Session Force-Closed - StudyByte"
+    )
+    create_notification(
         user_id=booking.listing.tutor_id,
         message=f"⚠️ Your session BKG-{booking.id} was force-closed by an admin. Reason: {reason}.",
-        action_url='/tutor/dashboard'
-    ))
+        action_url='/tutor/dashboard',
+        email_subject="Session Force-Closed - StudyByte"
+    )
 
     log_activity(session['user_id'], 'ADMIN_FORCE_CLOSE', f"Force-closed BKG-{booking.id}. Reason: {reason}")
     db.session.commit()
