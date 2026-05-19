@@ -17,20 +17,25 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"></noscript>
     
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com" defer></script>
     <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        'neon-teal': '#00d4aa',
-                        'neon-green': '#00ff88',
-                        'neon-purple': '#7c3aed',
-                        'neon-pink': '#ff2d9f',
+        // Set up tailwind configuration after defer load
+        window.addEventListener('DOMContentLoaded', () => {
+            if (window.tailwind) {
+                tailwind.config = {
+                    theme: {
+                        extend: {
+                            colors: {
+                                'neon-teal': '#00d4aa',
+                                'neon-green': '#00ff88',
+                                'neon-purple': '#7c3aed',
+                                'neon-pink': '#ff2d9f',
+                            }
+                        }
                     }
                 }
             }
-        }
+        });
     </script>
 
     <!-- Init theme ASAP to prevent flash -->
@@ -87,18 +92,17 @@
         .cursor-dot {
             width: 8px; height: 8px; background: #00d4aa;
             border-radius: 50%; position: fixed; pointer-events: none; z-index: 99998;
-            transform: translate(-50%, -50%);
-            transition: transform 0.1s ease, background 0.2s ease;
+            left: 0; top: 0;
+            transition: background 0.2s ease;
             box-shadow: 0 0 12px #00d4aa; display: none;
         }
         .cursor-ring {
             width: 32px; height: 32px; border: 1.5px solid rgba(0,212,170,0.5);
             border-radius: 50%; position: fixed; pointer-events: none; z-index: 99997;
-            transform: translate(-50%, -50%);
-            transition: all 0.15s ease; display: none;
+            left: 0; top: 0;
+            transition: border-color 0.15s ease; display: none;
         }
-        .cursor-dot.clicking  { transform: translate(-50%,-50%) scale(1.8); background: #7c3aed; }
-        .cursor-ring.clicking { transform: translate(-50%,-50%) scale(0.7); border-color: #7c3aed; }
+
 
         /* ── Floating Particles Canvas ─────────── */
         #particles-canvas {
@@ -540,27 +544,48 @@ const hasFinePointer = window.matchMedia('(pointer: fine)').matches;
 
 if (hasFinePointer) {
     let mouseX = 0, mouseY = 0, ringX = 0, ringY = 0;
+    let dotScale = 1, ringScale = 1;
+    let isHovering = false;
 
     document.addEventListener('mousemove', e => {
         mouseX = e.clientX; mouseY = e.clientY;
-        dot.style.left = mouseX + 'px'; dot.style.top = mouseY + 'px';
+        dot.style.transform = `translate3d(${mouseX}px, ${mouseY}px, 0) translate(-50%, -50%) scale(${dotScale})`;
     });
 
     function animateRing() {
         ringX += (mouseX - ringX) * 0.15;
         ringY += (mouseY - ringY) * 0.15;
-        ring.style.left = ringX + 'px'; ring.style.top = ringY + 'px';
+        ring.style.transform = `translate3d(${ringX}px, ${ringY}px, 0) translate(-50%, -50%) scale(${ringScale})`;
+        dot.style.transform = `translate3d(${mouseX}px, ${mouseY}px, 0) translate(-50%, -50%) scale(${dotScale})`;
         requestAnimationFrame(animateRing);
     }
     animateRing();
 
-    document.addEventListener('mousedown', () => { dot.classList.add('clicking'); ring.classList.add('clicking'); });
-    document.addEventListener('mouseup',   () => { dot.classList.remove('clicking'); ring.classList.remove('clicking'); });
+    document.addEventListener('mousedown', () => {
+        dotScale = 1.8;
+        ringScale = 0.7;
+        dot.style.background = '#7c3aed';
+        ring.style.borderColor = '#7c3aed';
+    });
+    document.addEventListener('mouseup',   () => {
+        dotScale = 1.0;
+        ringScale = isHovering ? 1.5 : 1.0;
+        dot.style.background = '#00d4aa';
+        ring.style.borderColor = isHovering ? 'rgba(124,58,237,0.7)' : 'rgba(0,212,170,0.5)';
+    });
 
     // Hover effects on interactive elements
     document.querySelectorAll('a,button,input,select,textarea').forEach(el => {
-        el.addEventListener('mouseenter', () => { ring.style.transform = 'translate(-50%,-50%) scale(1.5)'; ring.style.borderColor = 'rgba(124,58,237,0.7)'; });
-        el.addEventListener('mouseleave', () => { ring.style.transform = 'translate(-50%,-50%) scale(1)';   ring.style.borderColor = 'rgba(0,212,170,0.5)'; });
+        el.addEventListener('mouseenter', () => {
+            isHovering = true;
+            ringScale = 1.5;
+            ring.style.borderColor = 'rgba(124,58,237,0.7)';
+        });
+        el.addEventListener('mouseleave', () => {
+            isHovering = false;
+            ringScale = 1.0;
+            ring.style.borderColor = 'rgba(0,212,170,0.5)';
+        });
     });
 }
 
