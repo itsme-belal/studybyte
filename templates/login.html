@@ -201,9 +201,16 @@
                             form.submit();
                         }
                     });
+                    
+                    // Dynamically calculate width to prevent overflow on small mobile screens
+                    let cardWidth = document.querySelector('.login-card').clientWidth;
+                    let btnWidth = cardWidth - 64; // Subtracting 2rem (32px) padding on each side
+                    if (btnWidth > 340) btnWidth = 340; // Max width
+                    if (btnWidth < 220) btnWidth = 220; // Min width to keep it legible
+                    
                     google.accounts.id.renderButton(
                         document.getElementById("customGoogleBtn"),
-                        { theme: "outline", size: "large", text: "signin_with", width: 340, shape: "rectangular" }
+                        { theme: "outline", size: "large", text: "signin_with", width: btnWidth, shape: "rectangular" }
                     );
                 }
             }
