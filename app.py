@@ -38,6 +38,7 @@ GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-only-change-in-production')
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000  # Cache static files for 1 year for better PageSpeed
 
 # ── Database: Supabase PostgreSQL on Render, SQLite locally ───────────────────
 database_url = os.environ.get('DATABASE_URL', 'sqlite:///studybyte_v5.db')
