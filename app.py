@@ -15,14 +15,12 @@ from werkzeug.utils import secure_filename
 from flask_sqlalchemy import SQLAlchemy
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from datetime import datetime, timedelta
-import random, string, re, uuid, smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import random, string, re, uuid
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 import cloudinary
 import cloudinary.uploader
-import cloudinary.api
+
 
 # ── Cloudinary Config (Persistent Storage) ──────────────────────────────
 cloudinary.config( 
@@ -1920,7 +1918,7 @@ def wallet():
     withdrawals = WithdrawalRequest.query.filter_by(user_id=session['user_id']).order_by(WithdrawalRequest.timestamp.desc()).all()
     return render_template('wallet.html', transactions=transactions, purchases=purchases, withdrawals=withdrawals)
 
-import requests
+
 
 def initiate_payment_gateway(method, amount, req_id):
     """ Realistic Mock for Payment Gateway API Handshake """
