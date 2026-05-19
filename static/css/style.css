@@ -3,9 +3,8 @@
    Neon Glassmorphism + 3D + Animation Layer
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap');
-
 /* ── CSS Variables ─────────────────────────────────────────── */
+
 :root {
     --bg-dark:          #030712; /* Deepest blue-black */
     --bg-surface:       rgba(17, 24, 39, 0.7);

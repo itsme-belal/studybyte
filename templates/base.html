@@ -533,38 +533,43 @@ window.addEventListener('load', () => {
     }, 900);
 });
 
-// ── Custom Cursor ──────────────────────────────
+// ── Custom Cursor (Only for Desktop / Pointer Fine devices) ────────────────
 const dot  = document.getElementById('cursor-dot');
 const ring = document.getElementById('cursor-ring');
-let mouseX = 0, mouseY = 0, ringX = 0, ringY = 0;
+const hasFinePointer = window.matchMedia('(pointer: fine)').matches;
 
-document.addEventListener('mousemove', e => {
-    mouseX = e.clientX; mouseY = e.clientY;
-    dot.style.left = mouseX + 'px'; dot.style.top = mouseY + 'px';
-});
+if (hasFinePointer) {
+    let mouseX = 0, mouseY = 0, ringX = 0, ringY = 0;
 
-function animateRing() {
-    ringX += (mouseX - ringX) * 0.15;
-    ringY += (mouseY - ringY) * 0.15;
-    ring.style.left = ringX + 'px'; ring.style.top = ringY + 'px';
-    requestAnimationFrame(animateRing);
+    document.addEventListener('mousemove', e => {
+        mouseX = e.clientX; mouseY = e.clientY;
+        dot.style.left = mouseX + 'px'; dot.style.top = mouseY + 'px';
+    });
+
+    function animateRing() {
+        ringX += (mouseX - ringX) * 0.15;
+        ringY += (mouseY - ringY) * 0.15;
+        ring.style.left = ringX + 'px'; ring.style.top = ringY + 'px';
+        requestAnimationFrame(animateRing);
+    }
+    animateRing();
+
+    document.addEventListener('mousedown', () => { dot.classList.add('clicking'); ring.classList.add('clicking'); });
+    document.addEventListener('mouseup',   () => { dot.classList.remove('clicking'); ring.classList.remove('clicking'); });
+
+    // Hover effects on interactive elements
+    document.querySelectorAll('a,button,input,select,textarea').forEach(el => {
+        el.addEventListener('mouseenter', () => { ring.style.transform = 'translate(-50%,-50%) scale(1.5)'; ring.style.borderColor = 'rgba(124,58,237,0.7)'; });
+        el.addEventListener('mouseleave', () => { ring.style.transform = 'translate(-50%,-50%) scale(1)';   ring.style.borderColor = 'rgba(0,212,170,0.5)'; });
+    });
 }
-animateRing();
 
-document.addEventListener('mousedown', () => { dot.classList.add('clicking'); ring.classList.add('clicking'); });
-document.addEventListener('mouseup',   () => { dot.classList.remove('clicking'); ring.classList.remove('clicking'); });
-
-// Hover effects on interactive elements
-document.querySelectorAll('a,button,input,select,textarea').forEach(el => {
-    el.addEventListener('mouseenter', () => { ring.style.transform = 'translate(-50%,-50%) scale(1.5)'; ring.style.borderColor = 'rgba(124,58,237,0.7)'; });
-    el.addEventListener('mouseleave', () => { ring.style.transform = 'translate(-50%,-50%) scale(1)';   ring.style.borderColor = 'rgba(0,212,170,0.5)'; });
-});
-
-// ── Floating Particles ─────────────────────────
+// ── Floating Particles (Performance Optimized for Mobile) ─────────────────
 const canvas = document.getElementById('particles-canvas');
 const ctx    = canvas.getContext('2d');
 let particles = [];
-const PARTICLE_COUNT = 60;
+const isMobileDevice = window.innerWidth < 768;
+const PARTICLE_COUNT = isMobileDevice ? 15 : 60;
 
 function resizeCanvas() {
     canvas.width  = window.innerWidth;
@@ -591,8 +596,9 @@ for (let i = 0; i < PARTICLE_COUNT; i++) {
     particles.push({ ...createParticle(), life: Math.random() * 300 });
 }
 
-// Draw lines between nearby particles
+// Draw lines between nearby particles (Disabled on mobile to save CPU)
 function drawConnections() {
+    if (isMobileDevice) return;
     for (let i = 0; i < particles.length; i++) {
         for (let j = i + 1; j < particles.length; j++) {
             const dx = particles[i].x - particles[j].x;
@@ -621,10 +627,18 @@ function animateParticles() {
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
         ctx.fillStyle = p.color.replace(')', `,${alpha})`).replace('rgb(', 'rgba(').replace('#00d4aa', `rgba(0,212,170,${alpha})`).replace('#7c3aed', `rgba(124,58,237,${alpha})`).replace('#3b82f6', `rgba(59,130,246,${alpha})`);
-        ctx.shadowBlur = 6;
-        ctx.shadowColor = p.color;
+        
+        // Remove shadowBlur on mobile since it's a rendering bottleneck
+        if (!isMobileDevice) {
+            ctx.shadowBlur = 6;
+            ctx.shadowColor = p.color;
+        }
+        
         ctx.fill();
-        ctx.shadowBlur = 0;
+        
+        if (!isMobileDevice) {
+            ctx.shadowBlur = 0;
+        }
 
         if (p.life >= p.maxLife || p.y < -10 || p.x < -10 || p.x > canvas.width + 10) {
             particles[idx] = { ...createParticle() };
