@@ -30,3 +30,7 @@ uploads/
 # Vercel (replaced by Render)
 .vercel/
 vercel.json
+
+# Local raw video file
+/A boy With Laptop.mp4
+

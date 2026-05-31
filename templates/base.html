@@ -109,6 +109,35 @@
             position: fixed; inset: 0; z-index: -2;
             pointer-events: none;
         }
+        /* ── Video Background ──────────────────── */
+        .video-bg-container {
+            position: fixed;
+            inset: 0;
+            z-index: -4;
+            pointer-events: none;
+            overflow: hidden;
+            display: none;
+            background-color: var(--bg-dark);
+        }
+        .video-bg-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0;
+            transition: opacity 1.5s ease-in-out;
+            filter: saturate(0.8);
+        }
+        .video-bg-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+            background: radial-gradient(circle at 50% 50%, rgba(3, 7, 18, 0.45) 0%, rgba(3, 7, 18, 0.8) 100%);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+        [data-theme="light"] .video-bg-overlay {
+            background: radial-gradient(circle at 50% 50%, rgba(248, 250, 252, 0.45) 0%, rgba(248, 250, 252, 0.8) 100%);
+        }
         /* ── Scanline overlay ──────────────────── */
         .scanline-overlay {
             position: fixed; inset: 0; z-index: -1; pointer-events: none;
@@ -185,7 +214,8 @@
 <!-- ═══════════ PARTICLES CANVAS ═══════════ -->
 <canvas id="particles-canvas"></canvas>
 
-<!-- ═══════════ BACKGROUND (Video Removed for Performance) ═══════════ -->
+<!-- ═══════════ VIDEO BACKGROUND ═══════════ -->
+<div id="video-bg-container" class="video-bg-container"></div>
 
 <!-- ═══════════ AMBIENT GLOW ORBS ═══════════ -->
 <div style="position:fixed;pointer-events:none;z-index:-1;inset:0;overflow:hidden;">
@@ -530,12 +560,61 @@
 
 <!-- ═══════════ SCRIPTS ═══════════ -->
 <script>
-// ── Loading Screen ─────────────────────────────
+// ── Loading Screen & Video BG Loader ───────────
 window.addEventListener('load', () => {
     setTimeout(() => {
         document.getElementById('page-loader').classList.add('hidden');
+        initVideoBackground();
     }, 900);
 });
+
+function initVideoBackground() {
+    // Only load background video on desktop/larger screens with a fine pointer to keep mobile loading extremely fast
+    const isDesktop = window.innerWidth >= 1024 && window.matchMedia('(pointer: fine)').matches;
+    if (!isDesktop) return;
+
+    const container = document.getElementById('video-bg-container');
+    if (!container) return;
+
+    // Make container visible
+    container.style.display = 'block';
+
+    // Create video element
+    const video = document.createElement('video');
+    video.autoplay = true;
+    video.loop = true;
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = 'auto';
+
+    // Create source element
+    const source = document.createElement('source');
+    source.src = "{{ url_for('static', filename='videos/a_boy_with_laptop.mp4') }}";
+    source.type = 'video/mp4';
+    video.appendChild(source);
+
+    // Create overlay element
+    const overlay = document.createElement('div');
+    overlay.className = 'video-bg-overlay';
+    container.appendChild(overlay);
+    container.appendChild(video);
+
+    // Fade in once video starts playing
+    const fadeInVideo = () => {
+        video.style.opacity = '0.35'; // Perfect subtle opacity for premium backdrop
+    };
+
+    video.addEventListener('playing', fadeInVideo);
+    video.addEventListener('canplaythrough', fadeInVideo);
+    
+    // Fallback fade-in if events fire differently in some browsers
+    setTimeout(() => {
+        if (video.style.opacity !== '0.35') {
+            video.style.opacity = '0.35';
+        }
+    }, 3000);
+}
+
 
 // ── Custom Cursor (Only for Desktop / Pointer Fine devices) ────────────────
 const dot  = document.getElementById('cursor-dot');
