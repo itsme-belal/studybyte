@@ -49,6 +49,9 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     'pool_pre_ping': True,       # Reconnects dropped connections automatically
     'pool_recycle': 300,         # Recycle connections every 5 min (Supabase idle limit)
+    'connect_args': {
+        'prepare_threshold': 0   # Prevents prepared statement errors on Supabase Transaction Pooler
+    }
 }
 
 # ── File uploads: local disk for dev, /tmp for cloud ──────────────────────────
